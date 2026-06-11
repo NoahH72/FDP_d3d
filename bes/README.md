@@ -97,8 +97,8 @@ need to fill them in for your Polaris install.
 ### Pure-Python (any host)
 
 ```bash
-SHOT_LIST=/eagle/fusiondl_aesp/harrisn/plasma_shots_only.csv \
-BES_RAW_ROOT=/eagle/fusiondl_aesp/harrisn/signal_data/BES_Raw \
+SHOT_LIST=/eagle/<YOUR_PROJECT>/<YOUR_USERNAME>/plasma_shots_only.csv \
+BES_RAW_ROOT=/eagle/<YOUR_PROJECT>/<YOUR_USERNAME>/signal_data/BES_Raw \
 BATCH_START=0 BATCH_END=200 \
 BES_WORKERS=8 \
 python run_bes.py

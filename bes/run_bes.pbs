@@ -1,6 +1,6 @@
 #!/bin/bash
 #PBS -N bes_fetch
-# Logs: keep under ~/pbs (your home), not under /eagle/fusiondl_aesp/... — avoids
+# Logs: keep under ~/pbs (your home), not under /eagle/<YOUR_PROJECT>/... — avoids
 # PBS path truncation and keeps logs off project quota. mkdir -p ~/pbs once.
 #PBS -o ~/pbs/bes_fetch.out
 #PBS -e ~/pbs/bes_fetch.err
@@ -8,14 +8,14 @@
 #PBS -l walltime=02:00:00
 #PBS -q preemptable
 #PBS -l filesystems=home:eagle
-#PBS -A fusiondl_aesp
+#PBS -A <YOUR_PROJECT>
 #
 # Run the standalone BES fetch (besfu01..besfu64) on Polaris.
 #
 # PROXY REQUIREMENT (same as run_batch_channelwise.pbs):
 #   Polaris compute nodes have no outbound internet. Before submitting,
 #   start the HTTPS proxy on a login node:
-#     screen -dmS fdp_proxy python3 /eagle/fusiondl_aesp/harrisn/fdp/scripts/https_proxy.py
+#     screen -dmS fdp_proxy python3 /eagle/<YOUR_PROJECT>/<YOUR_USERNAME>/fdp/scripts/https_proxy.py
 #   The proxy writes its host:port into $FDP_ROOT/.proxy_addr so this script
 #   picks it up automatically.
 #
@@ -42,13 +42,13 @@
 #   mkdir -p ~/pbs && qsub -q debug \
 #     -l select=1:ncpus=4:mem=32gb,walltime=01:00:00,filesystems=home:eagle \
 #     -v SHOT_LIST=/path/shots.txt,BES_RAW_ROOT=/path/out,BATCH_START=0,BATCH_END=1,BES_WORKERS=2 \
-#     -A fusiondl_aesp run_bes.pbs
+#     -A <YOUR_PROJECT> run_bes.pbs
 
 set -u
 
-REPO_ROOT="/eagle/fusiondl_aesp/harrisn/ECEI-Data"
+REPO_ROOT="/eagle/<YOUR_PROJECT>/<YOUR_USERNAME>/ECEI-Data"
 BES_DIR="${REPO_ROOT}/bes_polaris"
-FDP_ROOT="/eagle/fusiondl_aesp/harrisn/fdp"
+FDP_ROOT="/eagle/<YOUR_PROJECT>/<YOUR_USERNAME>/fdp"
 FDP_PY="$FDP_ROOT/.pixi/envs/default/bin/python"
 FDP_CLI="$FDP_ROOT/.pixi/envs/default/bin/fdp"
 CONDA_FALLBACK="${CONDA_ENV:-$HOME/.conda/envs/toksearch}/bin/python"

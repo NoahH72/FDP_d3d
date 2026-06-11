@@ -32,8 +32,8 @@ Optional environment:
                              channel extraction (only used when prestaging).
 
 Example:
-    SHOT_LIST=/eagle/fusiondl_aesp/harrisn/plasma_shots.csv \
-    BES_RAW_ROOT=/eagle/fusiondl_aesp/harrisn/signal_data/BES_Raw \
+    SHOT_LIST=/eagle/MY_PROJECT/MY_USERNAME/plasma_shots.csv \
+    BES_RAW_ROOT=/eagle/MY_PROJECT/MY_USERNAME/signal_data/BES_Raw \
     BATCH_START=0 BATCH_END=200 BES_WORKERS=8 \
     python run_bes.py
 """

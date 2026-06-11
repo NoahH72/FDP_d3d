@@ -53,14 +53,14 @@ If no session is listed, start the proxy (see [03 - Proxy Setup](03_PROXY_SETUP.
 ```bash
 mkdir -p ~/pbs
 # Output will go to the directory configured in pipeline/paths_config.py
-# Default: /eagle/fusiondl_aesp/harrisn/signal_data/ECEI_Assembled/
+# Default: /eagle/<YOUR_PROJECT>/<YOUR_USERNAME>/signal_data/ECEI_Assembled/
 ```
 
 ### 4. Run a debug smoke test (2 shots, approximately 5 min)
 
 ```bash
 cd $PROJECT_ROOT
-qsub -A fusiondl_aesp \
+qsub -A <YOUR_PROJECT> \
   -q debug \
   -l select=1:ncpus=4:mem=32gb,walltime=01:00:00,filesystems=eagle \
   -v BATCH_START=0,BATCH_END=2 \
@@ -86,7 +86,7 @@ If you see `WARNING: proxy not reachable`, the proxy died. Restart it per [03 - 
 ### 6. Submit a production batch (single node, preemptable queue)
 
 ```bash
-qsub -A fusiondl_aesp \
+qsub -A <YOUR_PROJECT> \
   -v BATCH_START=0,BATCH_END=500 \
   pbs/run_batch_channelwise.pbs
 ```
@@ -96,7 +96,7 @@ The default PBS script requests 1 node, 32 CPUs, 200 GB RAM, 24 hr walltime on t
 ### 7. Submit a multi-node production run (10 nodes, faster)
 
 ```bash
-qsub -A fusiondl_aesp \
+qsub -A <YOUR_PROJECT> \
   -v BATCH_START=0,BATCH_END=1000 \
   pbs/run_batch_multinode.pbs
 ```
@@ -132,7 +132,7 @@ BATCH_SIZE=250 bash submit/submit_chain_pbs.sh
 Check that output files exist:
 
 ```bash
-ls /eagle/fusiondl_aesp/harrisn/signal_data/ECEI_Assembled/*.h5 | wc -l
+ls /eagle/<YOUR_PROJECT>/<YOUR_USERNAME>/signal_data/ECEI_Assembled/*.h5 | wc -l
 ```
 
 ## Next

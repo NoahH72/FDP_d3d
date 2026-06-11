@@ -8,11 +8,11 @@
 # all works on a single known-good plasma shot before scaling up.
 #
 # Prerequisites (login node):
-#   screen -dmS fdp_proxy python3 /eagle/fusiondl_aesp/harrisn/fdp/scripts/https_proxy.py
+#   screen -dmS fdp_proxy python3 /eagle/<YOUR_PROJECT>/<YOUR_USERNAME>/fdp/scripts/https_proxy.py
 #   screen -ls   # verify fdp_proxy is alive
 #
 # Usage:
-#   cd /eagle/fusiondl_aesp/harrisn/ECEI-Data/bes_polaris && bash submit_bes_smoke.sh
+#   cd /eagle/<YOUR_PROJECT>/<YOUR_USERNAME>/ECEI-Data/bes_polaris && bash submit_bes_smoke.sh
 #
 set -euo pipefail
 cd "$(dirname "$0")"
@@ -24,8 +24,8 @@ mkdir -p "${HOME}/pbs"
 
 # Same shot list used by submit_fdp_smoke.sh — these shots are known-good
 # (142170 in particular has been verified end-to-end against PTDATA).
-SMOKE_SHOTS="${SMOKE_SHOTS:-/eagle/fusiondl_aesp/harrisn/shot_lists/fdp_smoke_test.txt}"
-OUT_DIR="${BES_RAW_ROOT:-/eagle/fusiondl_aesp/harrisn/signal_data/BES_Raw_SmokeTest}"
+SMOKE_SHOTS="${SMOKE_SHOTS:-/eagle/<YOUR_PROJECT>/<YOUR_USERNAME>/shot_lists/fdp_smoke_test.txt}"
+OUT_DIR="${BES_RAW_ROOT:-/eagle/<YOUR_PROJECT>/<YOUR_USERNAME>/signal_data/BES_Raw_SmokeTest}"
 mkdir -p "$OUT_DIR"
 
 # Default: fetch the first shot only. Override with BATCH_END to grab more.
@@ -42,7 +42,7 @@ echo "Slice:          [$BATCH_START:$BATCH_END]  workers=$BES_WORKERS"
 qsub \
   -q debug \
   -l "select=1:ncpus=4:mem=32gb,walltime=01:00:00,filesystems=home:eagle" \
-  -A fusiondl_aesp \
+  -A <YOUR_PROJECT> \
   -o "$OUT_LOG" \
   -e "$ERR_LOG" \
   -N "bes_smoke" \

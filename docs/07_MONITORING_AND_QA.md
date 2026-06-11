@@ -75,7 +75,7 @@ grep -E "Done\.|s/shot|shots OK|shots MISSING" ~/pbs/ecei_channelwise.out | tail
 ### Count completed shots
 
 ```bash
-ls /eagle/fusiondl_aesp/harrisn/signal_data/ECEI_Assembled/*.h5 | wc -l
+ls /eagle/<YOUR_PROJECT>/<YOUR_USERNAME>/signal_data/ECEI_Assembled/*.h5 | wc -l
 ```
 
 ### Check a specific shot file structure
@@ -83,7 +83,7 @@ ls /eagle/fusiondl_aesp/harrisn/signal_data/ECEI_Assembled/*.h5 | wc -l
 ```python
 import h5py
 
-f = h5py.File('/eagle/fusiondl_aesp/harrisn/signal_data/ECEI_Assembled/142095.h5', 'r')
+f = h5py.File('/eagle/<YOUR_PROJECT>/<YOUR_USERNAME>/signal_data/ECEI_Assembled/142095.h5', 'r')
 sig = f['2D']['ecei']['signal']
 print('shape:', sig.shape)    # expected: (T, 20, 8)
 print('dtype:', sig.dtype)    # expected: float32 or float64
@@ -118,9 +118,9 @@ import os
 import numpy as np
 
 shot_list = np.loadtxt(
-    '/eagle/fusiondl_aesp/harrisn/shot_lists/Current_labeled_dset_highest_tol.txt'
+    '/eagle/<YOUR_PROJECT>/<YOUR_USERNAME>/shot_lists/Current_labeled_dset_highest_tol.txt'
 )[:,0].astype(int)
-out_dir = '/eagle/fusiondl_aesp/harrisn/signal_data/ECEI_Assembled'
+out_dir = '/eagle/<YOUR_PROJECT>/<YOUR_USERNAME>/signal_data/ECEI_Assembled'
 
 missing = [s for s in shot_list if not os.path.exists(f'{out_dir}/{s}.h5')]
 print(f'{len(missing)} / {len(shot_list)} shots missing')
@@ -138,7 +138,7 @@ The pipeline is **idempotent** -- it skips shots that already have a valid `.h5`
 - To force a re-fetch of a specific shot, delete its `.h5` file first:
 
 ```bash
-rm /eagle/fusiondl_aesp/harrisn/signal_data/ECEI_Assembled/<SHOT_NUMBER>.h5
+rm /eagle/<YOUR_PROJECT>/<YOUR_USERNAME>/signal_data/ECEI_Assembled/<SHOT_NUMBER>.h5
 ```
 
 Then resubmit the batch that includes that shot.
@@ -154,7 +154,7 @@ qselect -u $USER | xargs qdel    # cancel ALL your jobs (careful!)
 
 # Check proxy health from login node
 curl -s --max-time 5 \
-  --proxy "http://$(cat /eagle/fusiondl_aesp/harrisn/fdp/.proxy_addr)" \
+  --proxy "http://$(cat /eagle/<YOUR_PROJECT>/<YOUR_USERNAME>/fdp/.proxy_addr)" \
   https://osg-htc.org -o /dev/null && echo "proxy OK" || echo "proxy DEAD"
 ```
 

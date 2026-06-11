@@ -1,6 +1,6 @@
 #!/bin/bash
 #PBS -N ecei_channelwise
-# Logs: keep under ~/pbs (your home), not under /eagle/fusiondl_aesp/... — avoids PBS path truncation
+# Logs: keep under ~/pbs (your home), not under /eagle/<YOUR_PROJECT>/... — avoids PBS path truncation
 # and keeps logs off project quota. Create once: mkdir -p ~/pbs
 # Override anytime: qsub -o ~/pbs/my.out -e ~/pbs/my.err ...
 #PBS -o ~/pbs/ecei_channelwise.out
@@ -13,7 +13,7 @@
 # Run FetchRawDataChannelWise (channel-wise ECEI fetch + assemble with Ray).
 #
 # PROXY REQUIREMENT: Before submitting, start the HTTPS proxy on the login node:
-#   screen -dmS fdp_proxy python3 /eagle/fusiondl_aesp/harrisn/fdp/scripts/https_proxy.py
+#   screen -dmS fdp_proxy python3 /eagle/<YOUR_PROJECT>/<YOUR_USERNAME>/fdp/scripts/https_proxy.py
 # Compute nodes cannot reach osg-htc.org directly; the proxy routes FDP/Pelican
 # traffic through the login node's internet connection.
 #
@@ -23,7 +23,7 @@
 #   mkdir -p ~/pbs && qsub -v BATCH_START=0,BATCH_END=500 run_batch_channelwise.pbs
 # Debug queue example:
 #   mkdir -p ~/pbs && qsub -q debug -l select=1:ncpus=4:mem=32gb,walltime=01:00:00,filesystems=eagle \
-#     -v BATCH_START=0,BATCH_END=2 -A fusiondl_aesp run_batch_channelwise.pbs
+#     -v BATCH_START=0,BATCH_END=2 -A <YOUR_PROJECT> run_batch_channelwise.pbs
 #
 # CHAIN MODE (no babysitter / no screen needed):
 #   Add CHAIN_NEXT=1 to -v. The job will queue the NEXT slice in PBS Q state
@@ -34,8 +34,8 @@
 #   Override stop slice with CHAIN_STOP_AT=N (defaults to length of CLEAN_SHOTS_FILE).
 #   To halt cleanly: `touch ~/pbs/STOP_CHAIN` (current slice finishes; chain stops).
 
-REPO_ROOT="/eagle/fusiondl_aesp/harrisn/ECEI-Data"
-FDP_ROOT="/eagle/fusiondl_aesp/harrisn/fdp"
+REPO_ROOT="/eagle/<YOUR_PROJECT>/<YOUR_USERNAME>/ECEI-Data"
+FDP_ROOT="/eagle/<YOUR_PROJECT>/<YOUR_USERNAME>/fdp"
 FDP_PY="$FDP_ROOT/.pixi/envs/default/bin/python"
 CONDA_FALLBACK="${CONDA_ENV:-$HOME/.conda/envs/toksearch}/bin/python"
 # Prefer FDP pixi env when installed (see install_fdp_polaris.sh). USE_FDP=0 forces conda toksearch.
@@ -51,7 +51,7 @@ fi
 # ── HTTPS proxy (routes FDP/Pelican traffic through login node) ──────────────
 # Compute nodes have no outbound internet. The proxy must be running on a
 # login node before this job starts. Start it with:
-#   screen -dmS fdp_proxy python3 /eagle/fusiondl_aesp/harrisn/fdp/scripts/https_proxy.py
+#   screen -dmS fdp_proxy python3 /eagle/<YOUR_PROJECT>/<YOUR_USERNAME>/fdp/scripts/https_proxy.py
 # The proxy writes its host:port to $FDP_ROOT/.proxy_addr so jobs find it
 # regardless of which login node the proxy is on.
 FDP_PROXY_ADDR_FILE="$FDP_ROOT/.proxy_addr"
@@ -106,7 +106,7 @@ if [ "${CHAIN_NEXT:-0}" = "1" ]; then
   CHAIN_NAME_PREFIX="${CHAIN_NAME_PREFIX:-ecei_g}"
   CHAIN_QUEUE="${CHAIN_QUEUE:-debug}"
   CHAIN_WALLTIME="${CHAIN_WALLTIME:-01:00:00}"
-  CHAIN_ACCOUNT="${CHAIN_ACCOUNT:-fusiondl_aesp}"
+  CHAIN_ACCOUNT="${CHAIN_ACCOUNT:-<YOUR_PROJECT>}"
 
   if [ -z "${CHAIN_STOP_AT:-}" ]; then
     if [ -n "${CLEAN_SHOTS_FILE:-}" ] && [ -f "${CLEAN_SHOTS_FILE}" ]; then

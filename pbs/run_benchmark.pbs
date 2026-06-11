@@ -1,7 +1,7 @@
 #!/bin/bash
 #PBS -N ecei_benchmark
-#PBS -o /home/harris_72/pbs/ecei_benchmark.out
-#PBS -e /home/harris_72/pbs/ecei_benchmark.err
+#PBS -o /home/<YOUR_USERNAME>/pbs/ecei_benchmark.out
+#PBS -e /home/<YOUR_USERNAME>/pbs/ecei_benchmark.err
 #PBS -l select=1:ncpus=8:mem=32gb
 #PBS -l walltime=01:00:00
 #PBS -l filesystems=home:eagle
@@ -11,14 +11,14 @@
 # pre-stage performance.
 #
 # Submit:
-#   mkdir -p ~/pbs && qsub -A fusiondl_aesp run_benchmark.pbs
+#   mkdir -p ~/pbs && qsub -A <YOUR_PROJECT> run_benchmark.pbs
 
 set -u
 
-FDP_ROOT="/eagle/fusiondl_aesp/harrisn/fdp"
+FDP_ROOT="/eagle/<YOUR_PROJECT>/<YOUR_USERNAME>/fdp"
 FDP_PY="$FDP_ROOT/.pixi/envs/default/bin/python"
 FDP_CLI="$FDP_ROOT/.pixi/envs/default/bin/fdp"
-REPO_ROOT="/eagle/fusiondl_aesp/harrisn/ECEI-Data"
+REPO_ROOT="/eagle/<YOUR_PROJECT>/<YOUR_USERNAME>/ECEI-Data"
 
 export CONDA_PREFIX="$FDP_ROOT/.pixi/envs/default"
 export PREFIX="$CONDA_PREFIX"

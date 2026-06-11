@@ -16,13 +16,13 @@
 # so resubmitting the same range is safe.
 #
 # Usage:
-#   mkdir -p ~/pbs && qsub -v BATCH_START=0,BATCH_END=100 -A fusiondl_aesp run_batch_multinode.pbs
-#   mkdir -p ~/pbs && qsub -v BATCH_START=0,BATCH_END=1000 -A fusiondl_aesp run_batch_multinode.pbs
+#   mkdir -p ~/pbs && qsub -v BATCH_START=0,BATCH_END=100 -A <YOUR_PROJECT> run_batch_multinode.pbs
+#   mkdir -p ~/pbs && qsub -v BATCH_START=0,BATCH_END=1000 -A <YOUR_PROJECT> run_batch_multinode.pbs
 
 set -u
 
-REPO_ROOT="/eagle/fusiondl_aesp/harrisn/ECEI-Data"
-FDP_ROOT="/eagle/fusiondl_aesp/harrisn/fdp"
+REPO_ROOT="/eagle/<YOUR_PROJECT>/<YOUR_USERNAME>/ECEI-Data"
+FDP_ROOT="/eagle/<YOUR_PROJECT>/<YOUR_USERNAME>/fdp"
 FDP_PY="$FDP_ROOT/.pixi/envs/default/bin/python"
 FDP_CLI="$FDP_ROOT/.pixi/envs/default/bin/fdp"
 

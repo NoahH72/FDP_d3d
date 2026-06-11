@@ -10,11 +10,11 @@
 # Override shots: BATCH_START=0 BATCH_END=5 ./submit_test_fetch.sh
 #
 # Debug queue (if #PBS -q small is denied), set e.g.:
-#   PBS_EXTRA='-q debug -l select=1:ncpus=4:mem=32gb,walltime=01:00:00,filesystems=eagle -A fusiondl_aesp'
+#   PBS_EXTRA='-q debug -l select=1:ncpus=4:mem=32gb,walltime=01:00:00,filesystems=eagle -A <YOUR_PROJECT>'
 #   ./submit_test_fetch.sh
 set -euo pipefail
 cd "$(dirname "$0")"
-# PBS stdout/stderr under $HOME/pbs — not under /eagle/fusiondl_aesp (short paths, personal quota)
+# PBS stdout/stderr under $HOME/pbs — not under /eagle/<YOUR_PROJECT> (short paths, personal quota)
 mkdir -p "${HOME}/pbs"
 BATCH_START="${BATCH_START:-0}"
 BATCH_END="${BATCH_END:-2}"

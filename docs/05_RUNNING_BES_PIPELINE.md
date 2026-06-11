@@ -65,7 +65,7 @@ If either check fails, see [03 - Proxy Setup](03_PROXY_SETUP.md).
 
 ```bash
 cd $PROJECT_ROOT/bes
-qsub -v SHOT_LIST=/path/to/your/shots.txt,BES_RAW_ROOT=/eagle/fusiondl_aesp/harrisn/signal_data/BES_Raw,BATCH_START=0,BATCH_END=10 run_bes.pbs
+qsub -v SHOT_LIST=/path/to/your/shots.txt,BES_RAW_ROOT=/eagle/<YOUR_PROJECT>/<YOUR_USERNAME>/signal_data/BES_Raw,BATCH_START=0,BATCH_END=10 run_bes.pbs
 ```
 
 Replace `/path/to/your/shots.txt` with the path to your shot list file (CSV with a `shot` column, or a text file with one shot per line).
@@ -74,7 +74,7 @@ Replace `/path/to/your/shots.txt` with the path to your shot list file (CSV with
 
 ```bash
 SHOT_LIST=/path/to/shots.txt \
-BES_RAW_ROOT=/eagle/fusiondl_aesp/harrisn/signal_data/BES_Raw \
+BES_RAW_ROOT=/eagle/<YOUR_PROJECT>/<YOUR_USERNAME>/signal_data/BES_Raw \
 BATCH_START=0 BATCH_END=10 \
 BES_WORKERS=8 \
 python bes/run_bes.py
@@ -96,7 +96,7 @@ python bes/run_bes.py
 The pipeline skips shots that already have valid data in the output directory. To force a re-fetch, delete the per-shot HDF5 file:
 
 ```bash
-rm /eagle/fusiondl_aesp/harrisn/signal_data/BES_Raw/146xxx/146077.h5
+rm /eagle/<YOUR_PROJECT>/<YOUR_USERNAME>/signal_data/BES_Raw/146xxx/146077.h5
 ```
 
 ## Verify
@@ -104,13 +104,13 @@ rm /eagle/fusiondl_aesp/harrisn/signal_data/BES_Raw/146xxx/146077.h5
 Check that output files exist:
 
 ```bash
-find /eagle/fusiondl_aesp/harrisn/signal_data/BES_Raw -name "*.h5" | wc -l
+find /eagle/<YOUR_PROJECT>/<YOUR_USERNAME>/signal_data/BES_Raw -name "*.h5" | wc -l
 ```
 
 Inspect a single file:
 
 ```bash
-h5dump -H /eagle/fusiondl_aesp/harrisn/signal_data/BES_Raw/146xxx/146077.h5
+h5dump -H /eagle/<YOUR_PROJECT>/<YOUR_USERNAME>/signal_data/BES_Raw/146xxx/146077.h5
 ```
 
 ## Next

@@ -9,7 +9,7 @@ Quick reference for common issues. For detailed guides, see the [docs/](docs/) f
 | `WARNING: proxy not reachable` in PBS log | The `screen fdp_proxy` session died or login node rebooted | Restart proxy: `screen -dmS fdp_proxy python3 scripts/https_proxy.py --port 18443` |
 | `fdp run python -m ptdata.check` hangs >30s | `ALL_PROXY` not set, or proxy is down | Verify proxy is running (`screen -ls`); check env vars (`echo $ALL_PROXY`) |
 | `curl: connection refused` from compute node | Compute node has no direct internet | Set `ALL_PROXY` and `all_proxy` to point to the login node proxy |
-| Proxy starts but compute node can't reach it | Wrong login node hostname in proxy address | Check `cat /eagle/fusiondl_aesp/harrisn/fdp/.proxy_addr`; restart proxy if on wrong node |
+| Proxy starts but compute node can't reach it | Wrong login node hostname in proxy address | Check `cat /eagle/<YOUR_PROJECT>/<YOUR_USERNAME>/fdp/.proxy_addr`; restart proxy if on wrong node |
 
 ## Authentication Issues
 
@@ -58,7 +58,7 @@ Quick reference for common issues. For detailed guides, see the [docs/](docs/) f
 ```bash
 # Check proxy status
 screen -ls | grep fdp_proxy
-curl -s --max-time 5 --proxy "http://$(cat /eagle/fusiondl_aesp/harrisn/fdp/.proxy_addr)" \
+curl -s --max-time 5 --proxy "http://$(cat /eagle/<YOUR_PROJECT>/<YOUR_USERNAME>/fdp/.proxy_addr)" \
   https://osg-htc.org -o /dev/null && echo "proxy OK" || echo "proxy DEAD"
 
 # Check token
@@ -70,12 +70,12 @@ cat ~/.fdp/token | cut -d'.' -f2 | base64 -d 2>/dev/null | python3 -c \
    print('exp:', datetime.datetime.fromtimestamp(d['exp']), '| now:', datetime.datetime.now())"
 
 # Check FDP environment
-ls /eagle/fusiondl_aesp/harrisn/fdp/.pixi/envs/default/bin/python
-/eagle/fusiondl_aesp/harrisn/fdp/.pixi/envs/default/bin/python -c "import toksearch; print('OK')"
+ls /eagle/<YOUR_PROJECT>/<YOUR_USERNAME>/fdp/.pixi/envs/default/bin/python
+/eagle/<YOUR_PROJECT>/<YOUR_USERNAME>/fdp/.pixi/envs/default/bin/python -c "import toksearch; print('OK')"
 
 # Check all jobs
 qstat -u $USER
 
 # Check output count
-ls /eagle/fusiondl_aesp/harrisn/signal_data/ECEI_Assembled/*.h5 2>/dev/null | wc -l
+ls /eagle/<YOUR_PROJECT>/<YOUR_USERNAME>/signal_data/ECEI_Assembled/*.h5 2>/dev/null | wc -l
 ```

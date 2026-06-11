@@ -18,7 +18,7 @@ You need an active account on the ALCF Polaris supercomputer.
 
 ### 2. Project Allocation
 
-You must be a member of the **`fusiondl_aesp`** project allocation on Polaris. This grants you access to the shared Eagle filesystem at `/eagle/fusiondl_aesp/` and allows you to submit jobs charged to the project.
+You must be a member of the **`<YOUR_PROJECT>`** project allocation on Polaris. This grants you access to the shared Eagle filesystem at `/eagle/<YOUR_PROJECT>/` and allows you to submit jobs charged to the project.
 
 - If you are not already a member, contact the project PI or [ALCF Support](https://www.alcf.anl.gov/support-center/contact-us) to be added.
 
@@ -75,7 +75,7 @@ If you are new to PBS on Polaris, review the [ALCF Job Scheduling and Execution 
 Before proceeding, confirm all of the following:
 
 - [ ] You can SSH into `polaris.alcf.anl.gov` successfully
-- [ ] You are a member of the `fusiondl_aesp` project allocation
+- [ ] You are a member of the `<YOUR_PROJECT>` project allocation
 - [ ] Your FDP bearer token is saved at `~/.fdp/token` and starts with `eyJ`
 - [ ] You are familiar with `qsub`, `qstat`, and `qdel`
 

@@ -12,7 +12,7 @@ The Fusion Data Platform (FDP) on ALCF Polaris has three main components:
 
 ### 1.1 FDP pixi environment
 
-Installed at `/eagle/fusiondl_aesp/harrisn/fdp/.pixi/envs/default/`.
+Installed at `/eagle/<YOUR_PROJECT>/<YOUR_USERNAME>/fdp/.pixi/envs/default/`.
 
 Contains Python 3.11 and all required libraries:
 
@@ -29,7 +29,7 @@ A lightweight asyncio proxy running on a login node that tunnels HTTPS traffic f
 
 - Zero-thread design to fit within the 128-PID cgroup limit on Polaris login nodes.
 - Listens on port 18443 and forwards CONNECT requests to the Pelican CDN at `osg-htc.org:443`.
-- The proxy address is written to `/eagle/fusiondl_aesp/harrisn/fdp/.proxy_addr` at startup.
+- The proxy address is written to `/eagle/<YOUR_PROJECT>/<YOUR_USERNAME>/fdp/.proxy_addr` at startup.
 
 ### 1.3 Pipeline scripts
 
@@ -59,7 +59,7 @@ The **pre-stage optimization** changes this flow: it downloads the full archive 
 ## 3. File Layout on Eagle
 
 ```
-/eagle/fusiondl_aesp/harrisn/
+/eagle/<YOUR_PROJECT>/<YOUR_USERNAME>/
 ├── fdp/                        FDP pixi environment
 │   ├── .pixi/envs/default/    Installed env (Python, fdp CLI, libs)
 │   ├── pixi.toml              Dependency spec
@@ -79,7 +79,7 @@ The **pre-stage optimization** changes this flow: it downloads the full archive 
 
 | Variable | Value | Purpose |
 |----------|-------|---------|
-| `CONDA_PREFIX` | `/eagle/fusiondl_aesp/harrisn/fdp/.pixi/envs/default` | Plugin and cert path discovery |
+| `CONDA_PREFIX` | `/eagle/<YOUR_PROJECT>/<YOUR_USERNAME>/fdp/.pixi/envs/default` | Plugin and cert path discovery |
 | `PREFIX` | same as above | Fallback if `CONDA_PREFIX` is unset |
 | `ALL_PROXY` | `http://polaris-login-XX:18443` | Routes XRootD HTTPS through the proxy |
 | `all_proxy` | same as above | Case-insensitive fallback |

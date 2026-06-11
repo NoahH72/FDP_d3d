@@ -1,13 +1,18 @@
 """
 Central path configuration for the ECEI pipeline.
-Change USER_BASE to switch users or machines; all other paths are derived.
+Set the FDP_DATA_ROOT environment variable to your Eagle project base path, or
+edit USER_BASE directly. All other paths are derived from USER_BASE.
+
+Example:
+    export FDP_DATA_ROOT=/eagle/MY_PROJECT/MY_USERNAME
 """
 import os
 
 import numpy as np
 
-# Polaris (Eagle): data and outputs live under this tree. Override for other machines.
-USER_BASE = '/eagle/fusiondl_aesp/harrisn'
+# Polaris (Eagle): data and outputs live under this tree.
+# Set FDP_DATA_ROOT env var or edit this line directly for your allocation.
+USER_BASE = os.environ.get("FDP_DATA_ROOT", "/eagle/<YOUR_PROJECT>/<YOUR_USERNAME>")
 
 # Shot lists (input)
 shot_lists_dir = os.path.join(USER_BASE, 'shot_lists')
@@ -62,6 +67,6 @@ STATS_INDEX_FILE = os.path.join(USER_BASE, 'd3d_raw_data_stats.csv')
 # Physics raw (sharded layout, matches rodriguezj)
 phys_raw_root = os.path.join(signal_data_dir, 'd3d_raw_data_hdf5')
 # rodriguezj's shared store on Polaris/Eagle (read-only target; never append in place).
-RODRIGUEZJ_PHYS_SOURCE = '/eagle/fusiondl_aesp/d3d_raw_data_hdf5'
+RODRIGUEZJ_PHYS_SOURCE = os.environ.get("RODRIGUEZJ_PHYS_SOURCE", "")
 # saga7 beegfs path kept for reference (works only from saga, not Polaris).
 RODRIGUEZJ_PHYS_SOURCE_SAGA = '/mnt/beegfs/users/rodriguezj/d3d_raw_data_hdf5'

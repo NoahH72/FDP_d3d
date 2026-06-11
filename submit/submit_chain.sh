@@ -9,7 +9,7 @@
 #
 # Optional: set CLEAN_SHOTS_FILE to your shot list path; if set and file exists,
 # TOTAL_SHOTS is derived from it (line count). Otherwise TOTAL_SHOTS below is used.
-# e.g. CLEAN_SHOTS_FILE=/mnt/beegfs/users/harrisn/shot_lists/Current_labeled_dset_highest_tol.txt
+# e.g. CLEAN_SHOTS_FILE=/mnt/beegfs/users/<YOUR_USERNAME>/shot_lists/Current_labeled_dset_highest_tol.txt
 
 set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

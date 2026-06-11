@@ -7,7 +7,7 @@ Uses asyncio with synchronous DNS resolution to avoid spawning ANY threads,
 staying within the Polaris login node cgroup PID limit (128).
 
 Usage (login node):
-    nohup python3 https_proxy.py > /eagle/fusiondl_aesp/harrisn/fdp/proxy.log 2>&1 &
+    nohup python3 https_proxy.py > proxy.log 2>&1 &
 
 From compute node PBS job:
     export ALL_PROXY=http://polaris-login-04:18443
@@ -153,7 +153,10 @@ async def handle_client(client_reader, client_writer, loop):
                     pass
 
 
-ADDR_FILE = "/eagle/fusiondl_aesp/harrisn/fdp/.proxy_addr"
+ADDR_FILE = os.environ.get(
+    "FDP_PROXY_ADDR_FILE",
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), ".proxy_addr"),
+)
 
 
 def write_addr_file(hostname, port):

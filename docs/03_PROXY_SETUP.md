@@ -57,7 +57,7 @@ From a Polaris **login node**, run:
 screen -dmS fdp_proxy python3 $PROJECT_ROOT/scripts/https_proxy.py --port 18443
 ```
 
-Replace `$PROJECT_ROOT` with the path to your clone of this repository (e.g., `/eagle/fusiondl_aesp/harrisn/FDP_d3d`).
+Replace `$PROJECT_ROOT` with the path to your clone of this repository (e.g., `/eagle/<YOUR_PROJECT>/<YOUR_USERNAME>/FDP_d3d`).
 
 The proxy starts in the background inside a `screen` session named `fdp_proxy`.
 
@@ -66,7 +66,7 @@ The proxy starts in the background inside a `screen` session named `fdp_proxy`.
 ```bash
 screen -ls                    # should show "fdp_proxy"
 sleep 2
-cat /eagle/fusiondl_aesp/harrisn/fdp/.proxy_addr   # shows hostname:port
+cat /eagle/<YOUR_PROJECT>/<YOUR_USERNAME>/fdp/.proxy_addr   # shows hostname:port
 ```
 
 You should see a line like `polaris-login-01:18443` (the exact hostname depends on which login node you are on).

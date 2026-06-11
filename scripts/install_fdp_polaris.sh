@@ -4,7 +4,7 @@
 #
 # Interactive fallback (1 hour, Eagle):
 #   qsub -I -q debug -l select=1:ncpus=4:mem=32gb,walltime=01:00:00,filesystems=eagle
-#   bash /eagle/fusiondl_aesp/harrisn/ECEI-Data/install_fdp_polaris.sh
+#   bash /path/to/FDP_d3d/scripts/install_fdp_polaris.sh
 #
 set -euo pipefail
 export RAYON_NUM_THREADS="${RAYON_NUM_THREADS:-2}"
@@ -20,7 +20,9 @@ if ! conda env list | grep -q '^fdp-installer '; then
 fi
 conda activate fdp-installer
 
-FDP_DIR="/eagle/fusiondl_aesp/harrisn/fdp"
+# FDP_DIR: where the pixi environment is installed.
+# Override by setting FDP_DIR before running this script.
+FDP_DIR="${FDP_DIR:-$HOME/fdp-env}"
 mkdir -p "$FDP_DIR"
 
 if [[ ! -f "$FDP_DIR/pixi.toml" ]]; then

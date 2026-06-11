@@ -4,7 +4,7 @@ Fetch DIII-D diagnostic data (ECEI, BES, physics signals) on [ALCF Polaris](http
 
 ## Quick Start
 
-If you already have a Polaris account, an `fusiondl_aesp` allocation, and a valid FDP bearer token, these five steps get you from zero to your first ECEI data fetch:
+If you already have a Polaris account, an `<YOUR_PROJECT>` allocation, and a valid FDP bearer token, these five steps get you from zero to your first ECEI data fetch:
 
 ```bash
 # 1. Clone this repo on Polaris
@@ -12,7 +12,7 @@ git clone https://github.com/NoahH72/FDP_d3d.git
 cd FDP_d3d
 
 # 2. Install the FDP pixi environment (run on an interactive compute node)
-qsub -I -q debug -l select=1:ncpus=4:mem=32gb,walltime=01:00:00,filesystems=eagle -A fusiondl_aesp
+qsub -I -q debug -l select=1:ncpus=4:mem=32gb,walltime=01:00:00,filesystems=eagle -A <YOUR_PROJECT>
 bash scripts/install_fdp_polaris.sh
 exit   # back to login node
 
@@ -24,7 +24,7 @@ cat ~/.fdp/token | head -c 40   # should show a JWT string
 
 # 5. Submit a 2-shot smoke test
 mkdir -p ~/pbs
-qsub -A fusiondl_aesp \
+qsub -A <YOUR_PROJECT> \
   -q debug \
   -l select=1:ncpus=4:mem=32gb,walltime=01:00:00,filesystems=eagle \
   -v BATCH_START=0,BATCH_END=2 \
@@ -38,7 +38,7 @@ Monitor with `tail -f ~/pbs/ecei_channelwise.out`. You should see `Proxy reachab
 Before starting, you need:
 
 - An [ALCF account](https://accounts.alcf.anl.gov/) with access to Polaris
-- Membership in the `fusiondl_aesp` project allocation
+- Membership in the `<YOUR_PROJECT>` project allocation
 - A valid FDP bearer token (see [Prerequisites guide](docs/01_PREREQUISITES.md))
 - Basic familiarity with SSH, command line, and PBS job submission
 

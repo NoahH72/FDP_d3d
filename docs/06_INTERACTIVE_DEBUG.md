@@ -29,7 +29,7 @@ If no session is listed, start the proxy (see [03 - Proxy Setup](03_PROXY_SETUP.
 ```bash
 qsub -I -q debug \
   -l select=1:ncpus=4:mem=32gb,walltime=00:30:00,filesystems=eagle \
-  -A fusiondl_aesp
+  -A <YOUR_PROJECT>
 ```
 
 You will be dropped into a shell on a compute node (hostname like `x3001c0s1b0n0`).
@@ -39,7 +39,7 @@ You will be dropped into a shell on a compute node (hostname like `x3001c0s1b0n0
 ```bash
 export ALL_PROXY=http://polaris-login-01:18443
 export all_proxy=$ALL_PROXY
-export CONDA_PREFIX=/eagle/fusiondl_aesp/harrisn/fdp/.pixi/envs/default
+export CONDA_PREFIX=/eagle/<YOUR_PROJECT>/<YOUR_USERNAME>/fdp/.pixi/envs/default
 export PREFIX="$CONDA_PREFIX"
 export OPENBLAS_NUM_THREADS=1
 export OMP_NUM_THREADS=1
@@ -49,7 +49,7 @@ export MKL_NUM_THREADS=1
 **NOTE:** Replace `polaris-login-01` with the actual login node hostname where the proxy is running. Check with:
 
 ```bash
-cat /eagle/fusiondl_aesp/harrisn/fdp/.proxy_addr
+cat /eagle/<YOUR_PROJECT>/<YOUR_USERNAME>/fdp/.proxy_addr
 ```
 
 ### 4. Verify PTDATA connectivity (the core data access layer)
@@ -63,7 +63,7 @@ Expected output: `All checks passed.` and `fetch ok: True`
 ### 5. Run a minimal 2-shot fetch
 
 ```bash
-cd /eagle/fusiondl_aesp/harrisn/ECEI-Data
+cd /eagle/<YOUR_PROJECT>/<YOUR_USERNAME>/ECEI-Data
 BATCH_START=0 BATCH_END=2 \
   $CONDA_PREFIX/bin/fdp run $CONDA_PREFIX/bin/python FetchRawDataChannelWise.py --ray
 ```

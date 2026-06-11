@@ -42,7 +42,7 @@ cd FDP_d3d
 ### 3. Get an interactive compute node
 
 ```bash
-qsub -I -q debug -l select=1:ncpus=4:mem=32gb,walltime=01:00:00,filesystems=eagle -A fusiondl_aesp
+qsub -I -q debug -l select=1:ncpus=4:mem=32gb,walltime=01:00:00,filesystems=eagle -A <YOUR_PROJECT>
 ```
 
 Wait for the job to start. You will be dropped into a shell on a compute node.
@@ -66,20 +66,20 @@ Expected final output:
 FDP env OK
 ```
 
-The install takes several minutes. The installed environment lives at `$FDP_DIR/.pixi/envs/default/`, where `$FDP_DIR` is the directory where the FDP pixi project was installed (default: `/eagle/fusiondl_aesp/harrisn/fdp`).
+The install takes several minutes. The installed environment lives at `$FDP_DIR/.pixi/envs/default/`, where `$FDP_DIR` is the directory where the FDP pixi project was installed (default: `/eagle/<YOUR_PROJECT>/<YOUR_USERNAME>/fdp`).
 
 ### 5. Fix XRootD plugin symlinks (one-time, required)
 
 The XRootD plugin config files reference unversioned library names, but only the versioned `-5.so` files are shipped. Create the missing symlinks:
 
 ```bash
-cd /eagle/fusiondl_aesp/harrisn/fdp/.pixi/envs/default/lib
+cd /eagle/<YOUR_PROJECT>/<YOUR_USERNAME>/fdp/.pixi/envs/default/lib
 ln -sf libXrdClPelican-5.so libXrdClPelican.so
 ln -sf libXrdClCurl-5.so    libXrdClCurl.so
 ln -sf libXrdClS3-5.so      libXrdClS3.so
 ```
 
-If your `$FDP_DIR` is different from the default `/eagle/fusiondl_aesp/harrisn/fdp`, adjust the path accordingly.
+If your `$FDP_DIR` is different from the default `/eagle/<YOUR_PROJECT>/<YOUR_USERNAME>/fdp`, adjust the path accordingly.
 
 ### 6. Exit the compute node
 
@@ -96,7 +96,7 @@ You will be returned to the login node.
 From a login node, confirm the environment works:
 
 ```bash
-export CONDA_PREFIX=/eagle/fusiondl_aesp/harrisn/fdp/.pixi/envs/default
+export CONDA_PREFIX=/eagle/<YOUR_PROJECT>/<YOUR_USERNAME>/fdp/.pixi/envs/default
 export PREFIX="$CONDA_PREFIX"
 export OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1
 $CONDA_PREFIX/bin/python -c "import toksearch; print('OK')"

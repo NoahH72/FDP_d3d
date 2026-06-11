@@ -1,7 +1,7 @@
 #!/bin/bash
 #PBS -N ecei_prestage_test
-#PBS -o /home/harris_72/pbs/ecei_prestage_test.out
-#PBS -e /home/harris_72/pbs/ecei_prestage_test.err
+#PBS -o /home/<YOUR_USERNAME>/pbs/ecei_prestage_test.out
+#PBS -e /home/<YOUR_USERNAME>/pbs/ecei_prestage_test.err
 #PBS -l select=1:ncpus=32:mem=200gb
 #PBS -l walltime=01:00:00
 #PBS -l filesystems=home:eagle
@@ -13,14 +13,14 @@
 # Also tests different RAY_MAX_WORKERS values.
 #
 # Submit:
-#   mkdir -p ~/pbs && qsub -A fusiondl_aesp \
+#   mkdir -p ~/pbs && qsub -A <YOUR_PROJECT> \
 #     -v BATCH_START=100,BATCH_END=110,RAY_MAX_WORKERS=8 \
 #     run_prestage_test.pbs
 
 set -u
 
-REPO_ROOT="/eagle/fusiondl_aesp/harrisn/ECEI-Data"
-FDP_ROOT="/eagle/fusiondl_aesp/harrisn/fdp"
+REPO_ROOT="/eagle/<YOUR_PROJECT>/<YOUR_USERNAME>/ECEI-Data"
+FDP_ROOT="/eagle/<YOUR_PROJECT>/<YOUR_USERNAME>/fdp"
 FDP_PY="$FDP_ROOT/.pixi/envs/default/bin/python"
 FDP_CLI="$FDP_ROOT/.pixi/envs/default/bin/fdp"
 
@@ -61,7 +61,7 @@ PY_PREFIX="$(dirname "$(dirname "$FDP_PY")")"
 export LD_LIBRARY_PATH="${PY_PREFIX}/lib:${LD_LIBRARY_PATH:-}"
 
 # Use a separate output dir so we don't interfere with the main data
-export OUTPUT_DIR="/eagle/fusiondl_aesp/harrisn/signal_data/ECEI_Assembled_PrestageTest"
+export OUTPUT_DIR="/eagle/<YOUR_PROJECT>/<YOUR_USERNAME>/signal_data/ECEI_Assembled_PrestageTest"
 mkdir -p "$OUTPUT_DIR"
 
 echo "=========================================="

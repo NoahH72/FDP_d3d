@@ -3,13 +3,14 @@
 
 Use the FDP pixi interpreter, and on Polaris compute nodes set e.g.:
 
-  export CONDA_PREFIX=/eagle/fusiondl_aesp/harrisn/fdp/.pixi/envs/default
+  export CONDA_PREFIX=$FDP_ROOT/.pixi/envs/default
   export PREFIX="$CONDA_PREFIX"
   export OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1
 
   PTDATA_CHECK_SHOT=142170 \\
-    /eagle/fusiondl_aesp/harrisn/fdp/.pixi/envs/default/bin/python \\
-    /eagle/fusiondl_aesp/harrisn/fdp/scripts/ptdata_check_shot.py
+    $FDP_ROOT/.pixi/envs/default/bin/fdp run \\
+    $FDP_ROOT/.pixi/envs/default/bin/python \\
+    /path/to/FDP_d3d/scripts/ptdata_check_shot.py
 
 Optional: PTDATA_CHECK_POINTNAME=IP (default IP).
 Pelican auth: BEARER_TOKEN or ~/.fdp/token (see ptdata package docs).

@@ -6,17 +6,17 @@
 #
 # Prerequisites:
 #   1. HTTPS proxy running on a login node:
-#        screen -dmS fdp_proxy python3 /eagle/fusiondl_aesp/harrisn/fdp/scripts/https_proxy.py
+#        screen -dmS fdp_proxy python3 /eagle/<YOUR_PROJECT>/<YOUR_USERNAME>/fdp/scripts/https_proxy.py
 #   2. Bearer token current: cat ~/.fdp/token | head -c 40
 #
 # Usage:
-#   cd /eagle/fusiondl_aesp/harrisn/ECEI-Data
+#   cd /eagle/<YOUR_PROJECT>/<YOUR_USERNAME>/ECEI-Data
 #   bash submit_chain_pbs.sh                       # uses defaults below
 #   BATCH_SIZE=250 bash submit_chain_pbs.sh        # smaller batches
 #   TOTAL_SHOTS=100 bash submit_chain_pbs.sh       # quick test
 #
 # Derive TOTAL_SHOTS from shot list:
-#   CLEAN_SHOTS_FILE=/eagle/fusiondl_aesp/harrisn/shot_lists/Current_labeled_dset_highest_tol.txt \
+#   CLEAN_SHOTS_FILE=/eagle/<YOUR_PROJECT>/<YOUR_USERNAME>/shot_lists/Current_labeled_dset_highest_tol.txt \
 #     bash submit_chain_pbs.sh
 
 set -euo pipefail
@@ -30,7 +30,7 @@ QUEUE="${QUEUE:-preemptable}"
 WALLTIME="${WALLTIME:-24:00:00}"
 NCPUS="${NCPUS:-32}"
 MEM="${MEM:-200gb}"
-ACCOUNT="${ACCOUNT:-fusiondl_aesp}"
+ACCOUNT="${ACCOUNT:-<YOUR_PROJECT>}"
 
 if [ -n "${CLEAN_SHOTS_FILE:-}" ] && [ -f "$CLEAN_SHOTS_FILE" ]; then
   TOTAL_SHOTS=$(wc -l < "$CLEAN_SHOTS_FILE")
