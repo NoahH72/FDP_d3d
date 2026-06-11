@@ -1,0 +1,132 @@
+#!/bin/bash
+#PBS -N ecei_multinode
+#PBS -o ~/pbs/ecei_multinode.out
+#PBS -e ~/pbs/ecei_multinode.err
+#PBS -l select=10:system=polaris
+#PBS -l walltime=03:00:00
+#PBS -l place=scatter
+#PBS -q prod
+#PBS -l filesystems=home:eagle
+#PBS -k doe
+#
+# Multi-node ECEI fetch: requests 10 nodes so the job routes through the
+# prod queue (which requires >=10 nodes on Polaris). Each node runs an
+# independent copy of FetchRawDataChannelWise.py on a disjoint slice of
+# the shot list.  The pipeline skips shots that already have an HDF5 file,
+# so resubmitting the same range is safe.
+#
+# Usage:
+#   mkdir -p ~/pbs && qsub -v BATCH_START=0,BATCH_END=100 -A fusiondl_aesp run_batch_multinode.pbs
+#   mkdir -p ~/pbs && qsub -v BATCH_START=0,BATCH_END=1000 -A fusiondl_aesp run_batch_multinode.pbs
+
+set -u
+
+REPO_ROOT="/eagle/fusiondl_aesp/harrisn/ECEI-Data"
+FDP_ROOT="/eagle/fusiondl_aesp/harrisn/fdp"
+FDP_PY="$FDP_ROOT/.pixi/envs/default/bin/python"
+FDP_CLI="$FDP_ROOT/.pixi/envs/default/bin/fdp"
+
+BATCH_START="${BATCH_START:-0}"
+BATCH_END="${BATCH_END:-100}"
+TOTAL=$((BATCH_END - BATCH_START))
+
+# ── Proxy setup (same for all nodes) ─────────────────────────────────────────
+FDP_PROXY_ADDR_FILE="$FDP_ROOT/.proxy_addr"
+if [ -n "${FDP_PROXY_HOST:-}" ]; then
+  FDP_PROXY_PORT="${FDP_PROXY_PORT:-18443}"
+  _PROXY_ADDR="${FDP_PROXY_HOST}:${FDP_PROXY_PORT}"
+elif [ -f "$FDP_PROXY_ADDR_FILE" ]; then
+  _PROXY_ADDR="$(cat "$FDP_PROXY_ADDR_FILE" | tr -d '[:space:]')"
+else
+  echo "ERROR: proxy address file not found: $FDP_PROXY_ADDR_FILE"
+  exit 1
+fi
+export ALL_PROXY="http://${_PROXY_ADDR}"
+export all_proxy="$ALL_PROXY"
+
+if curl -s --max-time 10 --proxy "$ALL_PROXY" https://osg-htc.org -o /dev/null; then
+  echo "Proxy reachable: $ALL_PROXY"
+else
+  echo "ERROR: proxy not reachable at $ALL_PROXY"
+  exit 1
+fi
+
+# ── Determine nodes ──────────────────────────────────────────────────────────
+NODES=($(sort -u "$PBS_NODEFILE"))
+NUM_NODES=${#NODES[@]}
+
+echo "=========================================="
+echo "ECEI Multi-Node Fetch"
+echo "Job ID:     $PBS_JOBID"
+echo "Nodes:      $NUM_NODES  (${NODES[*]})"
+echo "Shot range: $BATCH_START .. $BATCH_END  ($TOTAL shots)"
+echo "Proxy:      $ALL_PROXY"
+echo "Start:      $(date)"
+echo "=========================================="
+
+# ── Divide shots evenly across nodes ─────────────────────────────────────────
+PER_NODE=$(( (TOTAL + NUM_NODES - 1) / NUM_NODES ))
+
+PIDS=()
+for i in $(seq 0 $((NUM_NODES - 1))); do
+  NODE_HOST="${NODES[$i]}"
+  NODE_START=$((BATCH_START + i * PER_NODE))
+  NODE_END=$((NODE_START + PER_NODE))
+  if [ "$NODE_END" -gt "$BATCH_END" ]; then NODE_END=$BATCH_END; fi
+  if [ "$NODE_START" -ge "$BATCH_END" ]; then break; fi
+
+  NODE_LOG="${HOME}/pbs/ecei_node${i}_${NODE_START}_${NODE_END}.log"
+
+  echo "  Node $i ($NODE_HOST): shots ${NODE_START}..${NODE_END}  -> $NODE_LOG"
+
+  ssh "$NODE_HOST" bash -l <<REMOTE_EOF > "$NODE_LOG" 2>&1 &
+set -u
+export CONDA_PREFIX="$FDP_ROOT/.pixi/envs/default"
+export PREFIX="\$CONDA_PREFIX"
+export ALL_PROXY="$ALL_PROXY"
+export all_proxy="$ALL_PROXY"
+export BATCH_START=$NODE_START
+export BATCH_END=$NODE_END
+export PYTHONUNBUFFERED=1
+export OPENBLAS_NUM_THREADS=1
+export OMP_NUM_THREADS=1
+export XRD_CURLDISABLEPREFETCH=1
+export ECEI_PROFILE="${ECEI_PROFILE:-1}"
+export ECEI_TIMING="${ECEI_TIMING:-1}"
+export RAY_MAX_WORKERS="${RAY_MAX_WORKERS:-16}"
+export ECEI_PRESTAGE="${ECEI_PRESTAGE:-1}"
+
+RAY_TMPDIR="/tmp/ray_${PBS_JOBID%%.*}_${i}"
+mkdir -p "\$RAY_TMPDIR"
+export TMPDIR="\$RAY_TMPDIR"
+export RAY_TMPDIR
+
+PY_PREFIX="\$(dirname "\$(dirname "$FDP_PY")")"
+export LD_LIBRARY_PATH="\${PY_PREFIX}/lib:\${LD_LIBRARY_PATH:-}"
+
+cd "$REPO_ROOT" || exit 1
+
+echo "[\$(hostname)] Starting shots $NODE_START..$NODE_END at \$(date)"
+"$FDP_CLI" run "$FDP_PY" FetchRawDataChannelWise.py --ray --prestage
+echo "[\$(hostname)] Finished at \$(date)"
+REMOTE_EOF
+
+  PIDS+=($!)
+done
+
+echo ""
+echo "Launched ${#PIDS[@]} node processes. Waiting..."
+
+# ── Wait for all nodes to finish ─────────────────────────────────────────────
+FAILURES=0
+for pid in "${PIDS[@]}"; do
+  wait "$pid" || FAILURES=$((FAILURES + 1))
+done
+
+echo "=========================================="
+echo "All nodes finished.  Failures: $FAILURES / ${#PIDS[@]}"
+echo "End: $(date)"
+echo "=========================================="
+echo ""
+echo "Per-node logs:"
+ls -lh ~/pbs/ecei_node*.log 2>/dev/null

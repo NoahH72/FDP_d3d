@@ -1,0 +1,33 @@
+[workspace]
+name = "fdp_dev"
+description = "Dev environment for the Fusion Data Platform - Mixed conda and pip package environment"
+channels = ["conda-forge", "ga-fdp"]
+platforms = ["linux-64"]
+
+[dependencies]
+python = "3.11.*"
+toksearch_d3d = ">=0.4.0"
+numba = "*"
+pip = "*"
+
+# cmflib exact-pins paramiko==3.4.1 and pathspec==0.12.1, which
+# conflict with newer versions provided by conda. The pins below
+# force conda to provide the versions cmflib expects.
+platformdirs = ">=3.1.1,<4"
+protobuf = "<5"
+attrs = "<24"
+paramiko = "==3.4.1"
+pathspec = "==0.12.1"
+ga-dfl-labeler = "==1.0.0"
+h5py = ">=3.16.0,<4"
+
+[pypi-dependencies]
+cmflib = { git = "https://github.com/sammuli/cmf.git", branch = "fdp_installer_rebase" }
+
+[tasks]
+
+[feature.dev.dependencies]
+black = "*"
+
+[environments]
+default = ["dev"]

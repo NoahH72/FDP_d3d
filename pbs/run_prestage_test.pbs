@@ -1,0 +1,85 @@
+#!/bin/bash
+#PBS -N ecei_prestage_test
+#PBS -o /home/harris_72/pbs/ecei_prestage_test.out
+#PBS -e /home/harris_72/pbs/ecei_prestage_test.err
+#PBS -l select=1:ncpus=32:mem=200gb
+#PBS -l walltime=01:00:00
+#PBS -l filesystems=home:eagle
+#PBS -q debug
+#
+# Test the pre-stage optimization on a small batch and compare with
+# the previous (remote fetch) profiling data.
+#
+# Also tests different RAY_MAX_WORKERS values.
+#
+# Submit:
+#   mkdir -p ~/pbs && qsub -A fusiondl_aesp \
+#     -v BATCH_START=100,BATCH_END=110,RAY_MAX_WORKERS=8 \
+#     run_prestage_test.pbs
+
+set -u
+
+REPO_ROOT="/eagle/fusiondl_aesp/harrisn/ECEI-Data"
+FDP_ROOT="/eagle/fusiondl_aesp/harrisn/fdp"
+FDP_PY="$FDP_ROOT/.pixi/envs/default/bin/python"
+FDP_CLI="$FDP_ROOT/.pixi/envs/default/bin/fdp"
+
+export CONDA_PREFIX="$FDP_ROOT/.pixi/envs/default"
+export PREFIX="$CONDA_PREFIX"
+
+BATCH_START="${BATCH_START:-100}"
+BATCH_END="${BATCH_END:-110}"
+
+# Proxy
+FDP_PROXY_ADDR_FILE="$FDP_ROOT/.proxy_addr"
+if [ -f "$FDP_PROXY_ADDR_FILE" ]; then
+  _PROXY_ADDR="$(cat "$FDP_PROXY_ADDR_FILE" | tr -d '[:space:]')"
+else
+  echo "ERROR: proxy not found"; exit 1
+fi
+export ALL_PROXY="http://${_PROXY_ADDR}"
+export all_proxy="$ALL_PROXY"
+
+if ! curl -s --max-time 10 --proxy "$ALL_PROXY" https://osg-htc.org -o /dev/null; then
+  echo "ERROR: proxy not reachable at $ALL_PROXY"; exit 1
+fi
+echo "Proxy reachable: $ALL_PROXY"
+
+export PYTHONUNBUFFERED=1
+export OPENBLAS_NUM_THREADS=1
+export OMP_NUM_THREADS=1
+export XRD_CURLDISABLEPREFETCH=1
+export ECEI_PROFILE=1
+export ECEI_TIMING=1
+export ECEI_PRESTAGE=1
+
+RAY_TMPDIR="/tmp/ray_${PBS_JOBID%%.*}"
+mkdir -p "$RAY_TMPDIR"
+export TMPDIR="$RAY_TMPDIR"
+
+PY_PREFIX="$(dirname "$(dirname "$FDP_PY")")"
+export LD_LIBRARY_PATH="${PY_PREFIX}/lib:${LD_LIBRARY_PATH:-}"
+
+# Use a separate output dir so we don't interfere with the main data
+export OUTPUT_DIR="/eagle/fusiondl_aesp/harrisn/signal_data/ECEI_Assembled_PrestageTest"
+mkdir -p "$OUTPUT_DIR"
+
+echo "=========================================="
+echo "ECEI Pre-Stage Test"
+echo "Job ID: $PBS_JOBID"
+echo "Node: $HOSTNAME"
+echo "Batch: $BATCH_START - $BATCH_END"
+echo "Output: $OUTPUT_DIR"
+echo "RAY_MAX_WORKERS: ${RAY_MAX_WORKERS:-8}"
+echo "Start: $(date)"
+echo "=========================================="
+
+cd "$REPO_ROOT" || exit 1
+
+# Run with pre-stage enabled
+export RAY_MAX_WORKERS="${RAY_MAX_WORKERS:-8}"
+"$FDP_CLI" run "$FDP_PY" FetchRawDataChannelWise.py --ray --prestage
+
+echo "=========================================="
+echo "End: $(date)"
+echo "=========================================="

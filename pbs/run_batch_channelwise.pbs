@@ -1,0 +1,199 @@
+#!/bin/bash
+#PBS -N ecei_channelwise
+# Logs: keep under ~/pbs (your home), not under /eagle/fusiondl_aesp/... — avoids PBS path truncation
+# and keeps logs off project quota. Create once: mkdir -p ~/pbs
+# Override anytime: qsub -o ~/pbs/my.out -e ~/pbs/my.err ...
+#PBS -o ~/pbs/ecei_channelwise.out
+#PBS -e ~/pbs/ecei_channelwise.err
+#PBS -l select=1:ncpus=32:mem=200gb
+#PBS -l walltime=24:00:00
+#PBS -q preemptable
+#PBS -l filesystems=eagle
+#
+# Run FetchRawDataChannelWise (channel-wise ECEI fetch + assemble with Ray).
+#
+# PROXY REQUIREMENT: Before submitting, start the HTTPS proxy on the login node:
+#   screen -dmS fdp_proxy python3 /eagle/fusiondl_aesp/harrisn/fdp/scripts/https_proxy.py
+# Compute nodes cannot reach osg-htc.org directly; the proxy routes FDP/Pelican
+# traffic through the login node's internet connection.
+#
+# Queue: if #PBS -q small is denied, pass -q debug (and matching -l) on the command line.
+#
+# Submit with batch range:
+#   mkdir -p ~/pbs && qsub -v BATCH_START=0,BATCH_END=500 run_batch_channelwise.pbs
+# Debug queue example:
+#   mkdir -p ~/pbs && qsub -q debug -l select=1:ncpus=4:mem=32gb,walltime=01:00:00,filesystems=eagle \
+#     -v BATCH_START=0,BATCH_END=2 -A fusiondl_aesp run_batch_channelwise.pbs
+#
+# CHAIN MODE (no babysitter / no screen needed):
+#   Add CHAIN_NEXT=1 to -v. The job will queue the NEXT slice in PBS Q state
+#   right after it starts running, then continue with its own work. Because
+#   debug allows 1 R + 1 Q per user, the chain runs back-to-back forever
+#   until: (a) NEXT_START >= CHAIN_STOP_AT, or (b) ~/pbs/STOP_CHAIN exists.
+#   Override stop file with CHAIN_STOP_FLAG=/path/to/flag.
+#   Override stop slice with CHAIN_STOP_AT=N (defaults to length of CLEAN_SHOTS_FILE).
+#   To halt cleanly: `touch ~/pbs/STOP_CHAIN` (current slice finishes; chain stops).
+
+REPO_ROOT="/eagle/fusiondl_aesp/harrisn/ECEI-Data"
+FDP_ROOT="/eagle/fusiondl_aesp/harrisn/fdp"
+FDP_PY="$FDP_ROOT/.pixi/envs/default/bin/python"
+CONDA_FALLBACK="${CONDA_ENV:-$HOME/.conda/envs/toksearch}/bin/python"
+# Prefer FDP pixi env when installed (see install_fdp_polaris.sh). USE_FDP=0 forces conda toksearch.
+FDP_CLI="$FDP_ROOT/.pixi/envs/default/bin/fdp"
+if [ "${USE_FDP:-1}" = "1" ] && [ -x "$FDP_PY" ]; then
+  PYTHON_BIN="$FDP_PY"
+  export CONDA_PREFIX="$FDP_ROOT/.pixi/envs/default"
+  export PREFIX="$CONDA_PREFIX"
+else
+  PYTHON_BIN="$CONDA_FALLBACK"
+fi
+
+# ── HTTPS proxy (routes FDP/Pelican traffic through login node) ──────────────
+# Compute nodes have no outbound internet. The proxy must be running on a
+# login node before this job starts. Start it with:
+#   screen -dmS fdp_proxy python3 /eagle/fusiondl_aesp/harrisn/fdp/scripts/https_proxy.py
+# The proxy writes its host:port to $FDP_ROOT/.proxy_addr so jobs find it
+# regardless of which login node the proxy is on.
+FDP_PROXY_ADDR_FILE="$FDP_ROOT/.proxy_addr"
+if [ -n "${FDP_PROXY_HOST:-}" ]; then
+  # Manual override: FDP_PROXY_HOST and FDP_PROXY_PORT set by caller
+  FDP_PROXY_PORT="${FDP_PROXY_PORT:-18443}"
+  _PROXY_ADDR="${FDP_PROXY_HOST}:${FDP_PROXY_PORT}"
+elif [ -f "$FDP_PROXY_ADDR_FILE" ]; then
+  _PROXY_ADDR="$(cat "$FDP_PROXY_ADDR_FILE" | tr -d '[:space:]')"
+else
+  echo "ERROR: proxy address file not found: $FDP_PROXY_ADDR_FILE"
+  echo "  Start proxy on a login node: screen -dmS fdp_proxy python3 $FDP_ROOT/scripts/https_proxy.py"
+  exit 1
+fi
+export ALL_PROXY="http://${_PROXY_ADDR}"
+export all_proxy="$ALL_PROXY"
+echo "Using proxy: $ALL_PROXY"
+# Quick connectivity check — fail fast rather than hanging for hours
+if curl -s --max-time 10 --proxy "$ALL_PROXY" https://osg-htc.org -o /dev/null; then
+  echo "Proxy reachable: https://osg-htc.org via $ALL_PROXY"
+else
+  echo "WARNING: proxy not reachable at $ALL_PROXY — FDP fetches will fail."
+  echo "  Start proxy on login node: screen -dmS fdp_proxy python3 $FDP_ROOT/scripts/https_proxy.py"
+  exit 1
+fi
+# ─────────────────────────────────────────────────────────────────────────────
+
+echo "=========================================="
+echo "ECEI FetchRawDataChannelWise batch job"
+echo "Job ID: $PBS_JOBID"
+echo "Node: $HOSTNAME"
+echo "Batch: BATCH_START=${BATCH_START:-0} BATCH_END=${BATCH_END:-10}"
+echo "Python: $PYTHON_BIN"
+echo "PBS stdout/stderr (short paths; tail these on login): ~/pbs/ecei_channelwise.{out,err}"
+echo "Start time: $(date)"
+echo "=========================================="
+
+# ── CHAIN MODE ─────────────────────────────────────────────────────────────
+# When CHAIN_NEXT=1, queue the NEXT slice in PBS now. Debug allows 1 running
+# + 1 queued per user, so the next job sits in Q until this one finishes.
+# Result: indefinite back-to-back chain with NO screen/babysitter.
+#
+# Stop conditions (any one halts the chain):
+#   1. touch  ${CHAIN_STOP_FLAG:-${HOME}/pbs/STOP_CHAIN}
+#   2. NEXT_START >= ${CHAIN_STOP_AT}  (default = derived from CLEAN_SHOTS_FILE)
+#   3. CHAIN_NEXT not set
+# ───────────────────────────────────────────────────────────────────────────
+if [ "${CHAIN_NEXT:-0}" = "1" ]; then
+  CHAIN_BATCH_SIZE="${CHAIN_BATCH_SIZE:-100}"
+  CHAIN_STOP_FLAG="${CHAIN_STOP_FLAG:-${HOME}/pbs/STOP_CHAIN}"
+  CHAIN_LOG_PREFIX="${CHAIN_LOG_PREFIX:-${HOME}/pbs/ecei_felipe100}"
+  CHAIN_NAME_PREFIX="${CHAIN_NAME_PREFIX:-ecei_g}"
+  CHAIN_QUEUE="${CHAIN_QUEUE:-debug}"
+  CHAIN_WALLTIME="${CHAIN_WALLTIME:-01:00:00}"
+  CHAIN_ACCOUNT="${CHAIN_ACCOUNT:-fusiondl_aesp}"
+
+  if [ -z "${CHAIN_STOP_AT:-}" ]; then
+    if [ -n "${CLEAN_SHOTS_FILE:-}" ] && [ -f "${CLEAN_SHOTS_FILE}" ]; then
+      CHAIN_STOP_AT=$(wc -l < "${CLEAN_SHOTS_FILE}")
+      case "${CLEAN_SHOTS_FILE}" in *.csv|*.CSV) CHAIN_STOP_AT=$((CHAIN_STOP_AT - 1));; esac
+    else
+      CHAIN_STOP_AT=11356
+    fi
+  fi
+
+  NEXT_START=${BATCH_END:-0}
+  NEXT_END=$((NEXT_START + CHAIN_BATCH_SIZE))
+  if [ "${NEXT_END}" -gt "${CHAIN_STOP_AT}" ]; then NEXT_END=${CHAIN_STOP_AT}; fi
+  STAMP=$(printf "%05d_%05d" "${NEXT_START}" "${NEXT_END}")
+  NEXT_OUT="${CHAIN_LOG_PREFIX}_${STAMP}.out"
+  NEXT_ERR="${CHAIN_LOG_PREFIX}_${STAMP}.err"
+  NEXT_NAME="${CHAIN_NAME_PREFIX}$((NEXT_START / CHAIN_BATCH_SIZE))"
+
+  if [ -f "${CHAIN_STOP_FLAG}" ]; then
+    echo "[CHAIN] STOP flag exists at ${CHAIN_STOP_FLAG} — NOT submitting next slice"
+  elif [ "${NEXT_START}" -ge "${CHAIN_STOP_AT}" ]; then
+    echo "[CHAIN] reached stop point ${CHAIN_STOP_AT} (next start=${NEXT_START}) — chain complete"
+  else
+    echo "[CHAIN] queueing next slice: ${NEXT_NAME} shots ${NEXT_START}..${NEXT_END} (stop_at=${CHAIN_STOP_AT})"
+    NEXT_JOB=$(qsub \
+      -A "${CHAIN_ACCOUNT}" \
+      -q "${CHAIN_QUEUE}" \
+      -l "select=1:ncpus=32:mem=200gb" \
+      -l "walltime=${CHAIN_WALLTIME}" \
+      -l "filesystems=home:eagle" \
+      -o "${NEXT_OUT}" -e "${NEXT_ERR}" \
+      -N "${NEXT_NAME}" \
+      -v "BATCH_START=${NEXT_START},BATCH_END=${NEXT_END},CLEAN_SHOTS_FILE=${CLEAN_SHOTS_FILE},RAY_MAX_WORKERS=${RAY_MAX_WORKERS:-16},ECEI_PROFILE=1,ECEI_TIMING=1,CHAIN_NEXT=1,CHAIN_BATCH_SIZE=${CHAIN_BATCH_SIZE},CHAIN_STOP_AT=${CHAIN_STOP_AT},CHAIN_STOP_FLAG=${CHAIN_STOP_FLAG},CHAIN_LOG_PREFIX=${CHAIN_LOG_PREFIX},CHAIN_NAME_PREFIX=${CHAIN_NAME_PREFIX},CHAIN_QUEUE=${CHAIN_QUEUE},CHAIN_WALLTIME=${CHAIN_WALLTIME},CHAIN_ACCOUNT=${CHAIN_ACCOUNT}" \
+      "${REPO_ROOT}/run_batch_channelwise.pbs" 2>&1) \
+      && echo "[CHAIN] queued: ${NEXT_JOB}" \
+      || echo "[CHAIN] WARN: qsub failed (current job will still run): ${NEXT_JOB}"
+  fi
+fi
+# ───────────────────────────────────────────────────────────────────────────
+
+export PYTHONUNBUFFERED=1
+export OPENBLAS_NUM_THREADS=1
+export OMP_NUM_THREADS=1
+export XRD_CURLDISABLEPREFETCH=1
+
+# Profiling: enable by default for production runs. Set ECEI_PROFILE=0 to disable.
+export ECEI_PROFILE="${ECEI_PROFILE:-1}"
+export ECEI_TIMING="${ECEI_TIMING:-1}"
+export RAY_MAX_WORKERS="${RAY_MAX_WORKERS:-16}"
+
+# Ray temp dir: PBS job temp paths are too long for Ray's AF_UNIX socket limit (107 bytes).
+# Override TMPDIR so that tempfile.mkdtemp() (used by toksearch's Ray init) picks a short path.
+# Use a short path under /tmp keyed by job ID to avoid collisions between concurrent jobs.
+RAY_TMPDIR="/tmp/ray_${PBS_JOBID%%.*}"
+mkdir -p "$RAY_TMPDIR"
+export TMPDIR="$RAY_TMPDIR"
+export RAY_TMPDIR
+
+PY_PREFIX="$(dirname "$(dirname "$PYTHON_BIN")")"
+export LD_LIBRARY_PATH="${PY_PREFIX}/lib:${LD_LIBRARY_PATH:-}"
+
+if [ "${USE_FDP:-1}" = "1" ] && [ -x "$FDP_CLI" ]; then
+  # FDP mode: fdp run sets PTDATA_LOC, PTDATA_JSON_INDEX_DIR, XRD_PLUGINCONFDIR, etc.
+  echo "Using FDP remote data access via fdp run wrapper"
+else
+  # Legacy mode: need local PTDATA_ROOT and toksearch index
+  export PTDATA_ROOT="${PTDATA_ROOT:-}"
+  export TOKSEARCH_INDEX_FILE="${TOKSEARCH_INDEX_FILE:-}"
+  export TOKSEARCH_INDEX_DIR="${TOKSEARCH_INDEX_DIR:-}"
+  if [ -z "$PTDATA_ROOT" ]; then
+    echo "WARNING: PTDATA_ROOT is not set. Data fetch will likely fail."
+  fi
+fi
+
+mkdir -p "${REPO_ROOT}/logs"
+cd "${REPO_ROOT}" || exit 1
+
+# Pre-stage: set ECEI_PRESTAGE=1 to download archive files in parallel
+# before each pass, then run pipeline in local mode (much faster).
+export ECEI_PRESTAGE="${ECEI_PRESTAGE:-1}"
+
+if [ "${USE_FDP:-1}" = "1" ] && [ -x "$FDP_CLI" ]; then
+  "$FDP_CLI" run "$PYTHON_BIN" FetchRawDataChannelWise.py --ray --prestage
+else
+  "$PYTHON_BIN" FetchRawDataChannelWise.py --ray --prestage
+fi
+
+echo "=========================================="
+echo "End time: $(date)"
+echo "=========================================="

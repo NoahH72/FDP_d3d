@@ -1,0 +1,154 @@
+#!/bin/bash
+#PBS -N bes_fetch
+# Logs: keep under ~/pbs (your home), not under /eagle/fusiondl_aesp/... — avoids
+# PBS path truncation and keeps logs off project quota. mkdir -p ~/pbs once.
+#PBS -o ~/pbs/bes_fetch.out
+#PBS -e ~/pbs/bes_fetch.err
+#PBS -l select=1:ncpus=32:mem=200gb
+#PBS -l walltime=02:00:00
+#PBS -q preemptable
+#PBS -l filesystems=home:eagle
+#PBS -A fusiondl_aesp
+#
+# Run the standalone BES fetch (besfu01..besfu64) on Polaris.
+#
+# PROXY REQUIREMENT (same as run_batch_channelwise.pbs):
+#   Polaris compute nodes have no outbound internet. Before submitting,
+#   start the HTTPS proxy on a login node:
+#     screen -dmS fdp_proxy python3 /eagle/fusiondl_aesp/harrisn/fdp/scripts/https_proxy.py
+#   The proxy writes its host:port into $FDP_ROOT/.proxy_addr so this script
+#   picks it up automatically.
+#
+# Required env vars (set with -v on the qsub command line):
+#   SHOT_LIST       CSV with 'shot' column (or whitespace text file)
+#   BES_RAW_ROOT    output root (sharded: {root}/{shot//1000}xxx/{shot}.h5)
+#
+# Optional:
+#   BATCH_START / BATCH_END     slice into shot list (default: full list)
+#   BES_WORKERS                 Ray worker count (default 8)
+#   REQUIRE_FULL=1              only skip shots with all 64 channels present
+#   USE_FDP=0                   force local-PTDATA path (legacy / off-Polaris)
+#   BES_PRESTAGE=0              disable prestage (default ON: prestage gives
+#                               ~5-7x speedup on Polaris vs direct remote
+#                               PtDataSignal fetches)
+#   BES_SHOT_BATCH=50           shots per prestage+pipeline batch
+#   BES_PRESTAGE_CONCURRENCY=8  xrdcp concurrency for prestage step
+#   BES_FETCH_THREADS=8         per-worker thread count for local extraction
+#
+# Submit:
+#   mkdir -p ~/pbs
+#   qsub -v SHOT_LIST=/path/shots.csv,BES_RAW_ROOT=/path/out,BATCH_START=0,BATCH_END=2 run_bes.pbs
+# Debug-queue example (small, faster turnaround for tests):
+#   mkdir -p ~/pbs && qsub -q debug \
+#     -l select=1:ncpus=4:mem=32gb,walltime=01:00:00,filesystems=home:eagle \
+#     -v SHOT_LIST=/path/shots.txt,BES_RAW_ROOT=/path/out,BATCH_START=0,BATCH_END=1,BES_WORKERS=2 \
+#     -A fusiondl_aesp run_bes.pbs
+
+set -u
+
+REPO_ROOT="/eagle/fusiondl_aesp/harrisn/ECEI-Data"
+BES_DIR="${REPO_ROOT}/bes_polaris"
+FDP_ROOT="/eagle/fusiondl_aesp/harrisn/fdp"
+FDP_PY="$FDP_ROOT/.pixi/envs/default/bin/python"
+FDP_CLI="$FDP_ROOT/.pixi/envs/default/bin/fdp"
+CONDA_FALLBACK="${CONDA_ENV:-$HOME/.conda/envs/toksearch}/bin/python"
+
+# Prefer FDP pixi env when installed (see install_fdp_polaris.sh). USE_FDP=0
+# forces the conda toksearch path, useful for non-Polaris hosts that have a
+# local PTDATA mirror.
+if [ "${USE_FDP:-1}" = "1" ] && [ -x "$FDP_PY" ]; then
+  PYTHON_BIN="$FDP_PY"
+  export CONDA_PREFIX="$FDP_ROOT/.pixi/envs/default"
+  export PREFIX="$CONDA_PREFIX"
+else
+  PYTHON_BIN="$CONDA_FALLBACK"
+fi
+
+# ── HTTPS proxy (Pelican/XRootD via login node) ──────────────────────────────
+# Only needed in the FDP path. Skip when USE_FDP=0.
+if [ "${USE_FDP:-1}" = "1" ] && [ -x "$FDP_CLI" ]; then
+  FDP_PROXY_ADDR_FILE="$FDP_ROOT/.proxy_addr"
+  if [ -n "${FDP_PROXY_HOST:-}" ]; then
+    FDP_PROXY_PORT="${FDP_PROXY_PORT:-18443}"
+    _PROXY_ADDR="${FDP_PROXY_HOST}:${FDP_PROXY_PORT}"
+  elif [ -f "$FDP_PROXY_ADDR_FILE" ]; then
+    _PROXY_ADDR="$(cat "$FDP_PROXY_ADDR_FILE" | tr -d '[:space:]')"
+  else
+    echo "ERROR: proxy address file not found: $FDP_PROXY_ADDR_FILE"
+    echo "  Start proxy on a login node:"
+    echo "    screen -dmS fdp_proxy python3 $FDP_ROOT/scripts/https_proxy.py"
+    exit 1
+  fi
+  export ALL_PROXY="http://${_PROXY_ADDR}"
+  export all_proxy="$ALL_PROXY"
+  echo "Using proxy: $ALL_PROXY"
+  if curl -s --max-time 10 --proxy "$ALL_PROXY" https://osg-htc.org -o /dev/null; then
+    echo "Proxy reachable: https://osg-htc.org via $ALL_PROXY"
+  else
+    echo "WARNING: proxy not reachable at $ALL_PROXY — FDP fetches will fail."
+    echo "  Start proxy on a login node:"
+    echo "    screen -dmS fdp_proxy python3 $FDP_ROOT/scripts/https_proxy.py"
+    exit 1
+  fi
+fi
+# ─────────────────────────────────────────────────────────────────────────────
+
+echo "=========================================="
+echo "BES fetch (besfu01..besfu64) — Polaris"
+echo "Job ID:        ${PBS_JOBID:-<interactive>}"
+echo "Node:          $(hostname)"
+echo "SHOT_LIST:     ${SHOT_LIST:-<unset>}"
+echo "BES_RAW_ROOT:  ${BES_RAW_ROOT:-<unset>}"
+echo "Batch:         BATCH_START=${BATCH_START:-0}  BATCH_END=${BATCH_END:-end}"
+echo "Workers:       ${BES_WORKERS:-8}"
+echo "Prestage:      ${BES_PRESTAGE:-1}  (batch=${BES_SHOT_BATCH:-50}, concurrency=${BES_PRESTAGE_CONCURRENCY:-8}, threads=${BES_FETCH_THREADS:-8})"
+echo "Python:        $PYTHON_BIN"
+echo "USE_FDP:       ${USE_FDP:-1}"
+echo "Start:         $(date)"
+echo "=========================================="
+
+export PYTHONUNBUFFERED=1
+export OPENBLAS_NUM_THREADS=1
+export OMP_NUM_THREADS=1
+export MKL_NUM_THREADS=1
+# Pelican's libcurl prefetch is incompatible with our XRootD plugin path.
+export XRD_CURLDISABLEPREFETCH=1
+
+# Ray hygiene: keep Ray's AF_UNIX socket path short (must fit in 107 bytes) AND
+# confine spill to a per-job dir so a runaway job can't fill /tmp. Saga learned
+# the latter the hard way (16 TB spill drained a node). Same precaution costs
+# nothing here.
+export RAY_DISABLE_MEMORY_MONITOR=1
+JOB_TMPDIR="/tmp/ray_${PBS_JOBID%%.*}"
+mkdir -p "$JOB_TMPDIR"
+trap 'rm -rf "$JOB_TMPDIR"' EXIT INT TERM
+export RAY_TMPDIR="$JOB_TMPDIR"
+export TMPDIR="$JOB_TMPDIR"
+
+PY_PREFIX="$(dirname "$(dirname "$PYTHON_BIN")")"
+export LD_LIBRARY_PATH="${PY_PREFIX}/lib:${LD_LIBRARY_PATH:-}"
+
+mkdir -p "${BES_DIR}/logs"
+cd "${BES_DIR}" || { echo "ERROR: cannot cd to ${BES_DIR}"; exit 1; }
+
+if [ "${USE_FDP:-1}" = "1" ] && [ -x "$FDP_CLI" ]; then
+  # FDP mode: `fdp run` sets PTDATA_LOC, PTDATA_JSON_INDEX_DIR,
+  # XRD_PLUGINCONFDIR, etc. so toksearch/PtDataSignal goes via Pelican.
+  echo "Using FDP remote PTDATA via fdp run wrapper"
+  "$FDP_CLI" run "$PYTHON_BIN" run_bes.py
+else
+  # Legacy local-PTDATA path. Requires PTDATA_ROOT + TOKSEARCH_INDEX_* to be
+  # set (e.g. in $REPO_ROOT/polaris_ptdata.env or via the qsub -v environment).
+  if [ -f "${REPO_ROOT}/polaris_ptdata.env" ]; then
+    # shellcheck disable=SC1091
+    set -a; source "${REPO_ROOT}/polaris_ptdata.env"; set +a
+  fi
+  if [ -z "${PTDATA_ROOT:-}" ]; then
+    echo "WARNING: PTDATA_ROOT is not set — local-PTDATA fetch will fail."
+  fi
+  "$PYTHON_BIN" run_bes.py
+fi
+
+echo "=========================================="
+echo "End:           $(date)"
+echo "=========================================="

@@ -1,0 +1,49 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+*.eggs/
+dist/
+build/
+
+# Pixi / Conda environments
+.pixi/
+pixi.lock
+*.conda
+*.tar.bz2
+
+# Data files
+*.h5
+*.hdf5
+*.h5.tmp
+
+# Tokens and credentials
+*.token
+token
+.fdp/
+
+# Core dumps
+core.*
+
+# Logs
+*.log
+logs/
+
+# PBS output
+*.out
+*.err
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor files
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+
+# Proxy runtime files
+.proxy_addr
+proxy.log
