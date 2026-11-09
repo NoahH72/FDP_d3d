@@ -25,6 +25,7 @@ h5py = ">=3.16.0,<4"
 cmflib = { git = "https://github.com/sammuli/cmf.git", branch = "fdp_installer_rebase" }
 
 [tasks]
+# Define custom tasks here
 
 [feature.dev.dependencies]
 black = "*"

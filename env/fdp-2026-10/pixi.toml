@@ -1,0 +1,16 @@
+[workspace]
+name = "fdp_dev"
+description = "Fusion Data Platform environment (slim core via fdp-core metapackage)"
+channels = ["conda-forge", "ga-fdp"]
+platforms = ["linux-64"]
+
+[dependencies]
+fdp-core = "*"
+
+[tasks]
+
+[feature.dev.dependencies]
+black = "*"
+
+[environments]
+default = ["dev"]

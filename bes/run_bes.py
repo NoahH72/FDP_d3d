@@ -32,8 +32,8 @@ Optional environment:
                              channel extraction (only used when prestaging).
 
 Example:
-    SHOT_LIST=/eagle/MY_PROJECT/MY_USERNAME/plasma_shots.csv \
-    BES_RAW_ROOT=/eagle/MY_PROJECT/MY_USERNAME/signal_data/BES_Raw \
+    SHOT_LIST=/eagle/<YOUR_PROJECT>/<YOUR_USERNAME>/plasma_shots.csv \
+    BES_RAW_ROOT=/eagle/<YOUR_PROJECT>/<YOUR_USERNAME>/signal_data/BES_Raw \
     BATCH_START=0 BATCH_END=200 BES_WORKERS=8 \
     python run_bes.py
 """
@@ -52,6 +52,36 @@ def _env_bool(name: str, default: bool) -> bool:
     if v is None:
         return default
     return v.strip().lower() in ("1", "true", "yes", "on")
+
+
+def _apply_index_snapshot():
+    """Repoint PTDATA_JSON_INDEX_DIR at the newest known FDP json-index snapshot.
+
+    `fdp run` overwrites PTDATA_JSON_INDEX_DIR with a hardcoded default snapshot
+    (currently json_indexes_2026-01-13) that no longer resolves current shots, so
+    every prestage index read fails with "[3011] Not found". The ECEI fetcher
+    works around this by discovering/repointing at the latest snapshot; BES must
+    do the same. Standalone (no ECEI-Data import): take the snapshot name from
+    $FDP_INDEX_SNAPSHOT, else ~/.fdp/latest_index_snapshot (written by the ECEI
+    discovery). Must run AFTER `fdp run` has applied its defaults, i.e. here in
+    the child process, not in the .pbs shell.
+    """
+    base = "pelican://osg-htc.org:443/fdp-d3d/archives/index/json"
+    snap = os.environ.get("FDP_INDEX_SNAPSHOT")
+    if not snap:
+        cache = os.path.join(os.path.expanduser("~"), ".fdp", "latest_index_snapshot")
+        try:
+            with open(cache) as fh:
+                snap = fh.read().strip()
+        except OSError:
+            snap = None
+    if snap:
+        os.environ["PTDATA_JSON_INDEX_DIR"] = "{}/{}".format(base, snap)
+        print("[bes-index] PTDATA_JSON_INDEX_DIR -> {}/{}".format(base, snap), flush=True)
+    else:
+        print("[bes-index] WARNING: no snapshot found (set FDP_INDEX_SNAPSHOT or "
+              "~/.fdp/latest_index_snapshot); using fdp default "
+              "{}".format(os.environ.get("PTDATA_JSON_INDEX_DIR", "<unset>")), flush=True)
 
 
 def load_shots(path: str):
@@ -103,6 +133,10 @@ def main():
     if not os.path.exists(shot_list_path):
         print("ERROR: SHOT_LIST does not exist: {}".format(shot_list_path), file=sys.stderr)
         sys.exit(2)
+
+    # Repoint the PTDATA json index at a working snapshot before any fetch.
+    if _env_bool("USE_FDP", True):
+        _apply_index_snapshot()
 
     root = os.environ.get("BES_RAW_ROOT")
     if not root:

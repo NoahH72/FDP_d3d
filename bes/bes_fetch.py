@@ -188,6 +188,8 @@ def write_bes_shot(rec, root: str, sharded: bool = True) -> None:
         channels.append((key, vals32, times64))
 
     if not channels:
+        print("  [{}] no_bes: 0/64 channels returned data (shot likely has no "
+              "BES fast-channel data)".format(shot), flush=True)
         return
 
     mode = "a" if os.path.exists(path) else "w"

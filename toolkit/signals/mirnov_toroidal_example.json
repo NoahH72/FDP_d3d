@@ -1,0 +1,7 @@
+{
+ "name": "mirnov_toroidal_example",
+ "note": "Example of ptdata_regex: every toroidal midplane dB/dt probe the pinned index lists for the shot. The production Mirnov stores used examples/mirnov/ (old env, float32 with raw-count checks) instead.",
+ "signals": {
+  "mpi66m": {"kind": "ptdata_regex", "pattern": "^MPI66M\\d{3}D$"}
+ }
+}

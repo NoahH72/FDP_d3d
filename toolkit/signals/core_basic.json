@@ -1,0 +1,9 @@
+{
+ "name": "core_basic",
+ "note": "Signals verified over FDP on Polaris (2026-10-13 smoke test, both envs). Start here.",
+ "signals": {
+  "ip": {"kind": "ptdata", "pointname": "ip"},
+  "efit01_ipmhd": {"kind": "mds", "tree": "EFIT01", "node": "\\ipmhd", "dims": ["times"]},
+  "ts_core_te": {"kind": "mds", "tree": "ELECTRONS", "node": "TS.BLESSED.CORE:TEMP", "dims": ["times"]}
+ }
+}

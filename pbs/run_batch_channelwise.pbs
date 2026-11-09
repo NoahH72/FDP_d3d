@@ -188,10 +188,15 @@ cd "${REPO_ROOT}" || exit 1
 # before each pass, then run pipeline in local mode (much faster).
 export ECEI_PRESTAGE="${ECEI_PRESTAGE:-1}"
 
+# Only pass --prestage when ECEI_PRESTAGE=1 so ECEI_PRESTAGE=0 truly runs in
+# direct (non-prestage) mode. Older shots whose prestaged archive yields
+# no_data must be fetched this way.
+PRESTAGE_ARG=""
+[ "${ECEI_PRESTAGE:-1}" = "1" ] && PRESTAGE_ARG="--prestage"
 if [ "${USE_FDP:-1}" = "1" ] && [ -x "$FDP_CLI" ]; then
-  "$FDP_CLI" run "$PYTHON_BIN" FetchRawDataChannelWise.py --ray --prestage
+  "$FDP_CLI" run "$PYTHON_BIN" FetchRawDataChannelWise.py --ray $PRESTAGE_ARG
 else
-  "$PYTHON_BIN" FetchRawDataChannelWise.py --ray --prestage
+  "$PYTHON_BIN" FetchRawDataChannelWise.py --ray $PRESTAGE_ARG
 fi
 
 echo "=========================================="

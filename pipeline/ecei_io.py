@@ -145,3 +145,81 @@ def save_to_hdf5(file_path, channel_name, data=None, time=None, is_missing=False
         # so we don't think it's 'done' later.
         if os.path.exists(file_path):
             os.remove(file_path)
+
+# ECEI detector geometry (20 vertical rows x 8 horizontal columns = 160 channels)
+ECEI_ROWS = 20
+ECEI_COLS = 8
+
+
+def check_assembled_content(
+    file_path,
+    blank_atol=0.0,
+    min_bytes=50_000_000,
+    suspect_zero_frac=0.10,
+    blank_zero_frac=0.95,
+):
+    """
+    Content-level QA for an assembled ECEI file, complementing the *structural*
+    check in ``check_assembled_file()``.
+
+    Detects silently zero-filled / blank channels -- the FDP/Pelican CDN-miss
+    failure mode where a shot exists on D3D but the pipeline writes zeros -- WITHOUT
+    loading the full multi-GB signal. A real ECEI channel has non-zero variance,
+    so a channel whose stored ``channel_stds`` and ``channel_means`` are both ~0 is
+    treated as blank.
+
+    Returns a dict:
+        ok            bool   -- structurally valid AND status == 'good'
+        status        str    -- 'good' | 'suspect' | 'blank' | 'invalid' | 'missing'
+        n_good        int    -- channels with signal (0..160)
+        n_total       int    -- 160
+        zero_fraction float  -- fraction of all-zero (blank) channels
+        bytes         int    -- file size on disk
+        reason        str
+    """
+    n_total = ECEI_ROWS * ECEI_COLS
+    if not file_path or not os.path.exists(file_path):
+        return {"ok": False, "status": "missing", "n_good": 0, "n_total": n_total,
+                "zero_fraction": 1.0, "bytes": 0, "n_time": 0, "reason": "file missing"}
+    try:
+        nbytes = os.path.getsize(file_path)
+    except OSError:
+        nbytes = 0
+    if not check_assembled_file(file_path):
+        return {"ok": False, "status": "invalid", "n_good": 0, "n_total": n_total,
+                "zero_fraction": 1.0, "bytes": nbytes, "n_time": 0,
+                "reason": "failed check_assembled_file"}
+    try:
+        with h5py.File(file_path, "r") as f:
+            g = f["2D"]["ecei"]
+            means = g["channel_means"][:]
+            stds = g["channel_stds"][:]
+            n_time = int(g["signal"].shape[0])
+    except (OSError, IOError, KeyError) as e:
+        return {"ok": False, "status": "invalid", "n_good": 0, "n_total": n_total,
+                "zero_fraction": 1.0, "bytes": nbytes, "n_time": 0, "reason": str(e)}
+
+    blank_mask = (np.abs(stds) <= blank_atol) & (np.abs(means) <= blank_atol)
+    n_blank = int(np.count_nonzero(blank_mask))
+    n_good = n_total - n_blank
+    zero_fraction = n_blank / float(n_total)
+
+    reason = ""
+    if n_good == 0 or zero_fraction >= blank_zero_frac:
+        # (near-)fully zero-filled: the real CDN-miss blank signature.
+        status = "blank"
+        reason = f"{n_blank}/{n_total} channels all-zero"
+    elif zero_fraction > suspect_zero_frac:
+        status = "suspect"
+        reason = f"{n_blank}/{n_total} channels all-zero (partial)"
+    elif nbytes < min_bytes:
+        # All channels present but unusually small on disk: likely a genuinely
+        # short shot, but flag for a human/QA look rather than trusting blindly.
+        status = "suspect"
+        reason = f"small file ({nbytes} bytes, {n_time} samples) but all channels present"
+    else:
+        status = "good"
+
+    return {"ok": status == "good", "status": status, "n_good": n_good,
+            "n_total": n_total, "zero_fraction": round(zero_fraction, 4),
+            "bytes": nbytes, "n_time": n_time, "reason": reason}

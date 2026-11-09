@@ -145,23 +145,42 @@ class ShotPreStager:
         shot_dir = str(shot // 100)
         idx_url = f"{_INDEX_BASE}/{shot_dir}/{shot}.json"
 
-        proc = subprocess.run(
-            [self.python_bin, "-c",
-             f"import json, os; os._exit(0) if False else None\n"
-             f"from pyxrootd import client\n"
-             f"f = client.File()\n"
-             f"s, _ = f.open('{idx_url}')\n"
-             f"assert s['ok'], f'open: {{s}}'\n"
-             f"s, data = f.read()\n"
-             f"assert s['ok'], f'read: {{s}}'\n"
-             f"f.close()\n"
-             f"import sys; sys.stdout.buffer.write(data)\n"],
-            capture_output=True, timeout=60,
-        )
+        # DIII-D archives can be cold on the FDP origin (staged from tape on
+        # first touch). The very first index read for a shot often times out
+        # with XRootD code 206 "Origin did not respond within timeout" while the
+        # origin warms the object; the immediate retry then succeeds. A single
+        # attempt was silently dooming these shots — pass 0 (which CREATES the
+        # HDF5) failed, so every later pass skipped with "file not found".
+        # Retry with backoff and a generous per-open timeout to ride out the
+        # cold-start window.
+        n_attempts = int(os.environ.get("PRESTAGE_INDEX_RETRIES", "5"))
+        open_timeout = int(os.environ.get("PRESTAGE_INDEX_OPEN_TIMEOUT", "120"))
+        proc = None
+        last_err = ""
+        for attempt in range(n_attempts):
+            proc = subprocess.run(
+                [self.python_bin, "-c",
+                 f"import json, os; os._exit(0) if False else None\n"
+                 f"from pyxrootd import client\n"
+                 f"f = client.File()\n"
+                 f"s, _ = f.open('{idx_url}', timeout={open_timeout})\n"
+                 f"assert s['ok'], f'open: {{s}}'\n"
+                 f"s, data = f.read()\n"
+                 f"assert s['ok'], f'read: {{s}}'\n"
+                 f"f.close()\n"
+                 f"import sys; sys.stdout.buffer.write(data)\n"],
+                capture_output=True, timeout=open_timeout + 30,
+            )
+            if proc.stdout:
+                break
+            last_err = proc.stderr.decode()[:200]
+            if attempt < n_attempts - 1:
+                time.sleep(min(5 * (attempt + 1), 30))  # 5s,10s,15s,20s...
+
         if not proc.stdout:
             raise RuntimeError(
-                f"Index read failed for shot {shot}: "
-                f"rc={proc.returncode} stderr={proc.stderr.decode()[:200]}"
+                f"Index read failed for shot {shot} after {n_attempts} attempts: "
+                f"rc={proc.returncode} stderr={last_err}"
             )
 
         idx = json.loads(proc.stdout)
@@ -219,10 +238,27 @@ for ext, url in ext_urls.items():
         exts[ext] = str(dest)
         total_bytes += dest.stat().st_size
         continue
-    f = client.File()
-    s, _ = f.open(url)
+    # Cold archives on the origin can time out on first touch (XRootD 206);
+    # retry with backoff + generous open timeout so the origin can warm/stage.
+    import time as _t
+    _open_to = int(os.environ.get("PRESTAGE_ARCHIVE_OPEN_TIMEOUT", "300"))
+    _retries = int(os.environ.get("PRESTAGE_ARCHIVE_RETRIES", "4"))
+    f = None
+    _last = None
+    for _a in range(_retries):
+        f = client.File()
+        s, _ = f.open(url, timeout=_open_to)
+        if s["ok"]:
+            break
+        _last = s
+        try:
+            f.close()
+        except Exception:
+            pass
+        if _a < _retries - 1:
+            _t.sleep(min(5 * (_a + 1), 30))
     if not s["ok"]:
-        print(json.dumps({{"error": f"open {{url}}: {{s}}"}}))
+        print(json.dumps({{"error": f"open {{url}}: {{_last}}"}}))
         os._exit(1)
     s, data = f.read()
     if not s["ok"]:

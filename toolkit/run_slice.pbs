@@ -1,0 +1,27 @@
+#!/bin/bash
+#PBS -N fdp_slice
+#PBS -l select=1
+#PBS -j oe
+# One slice of shots through toolkit/fetch_signals.py. Usually submitted by chain_driver.sh; by hand:
+#   qsub -A <PROJECT> -q debug -l walltime=01:00:00 -l filesystems=home:eagle -l select=1:system=polaris \
+#        -o <campaign>/logs/<series>_s001.pbs.out \
+#        -v REPO=<repo>,SPEC=<spec.json>,SLICE_FILE=<slices/x_s001.txt>,OUT=<store>,LANES=16,WALL=01:00:00 toolkit/run_slice.pbs
+# Optional -v: FDP_ENV_KIND=old, EXTRA="--float32-checked", FDP_SITE_ENV=<site.env>
+# Exit codes: 2 no slice file, 3 token too short, 5 proxy unreachable.
+set -u
+. "${REPO:?set REPO=<path of this repo>}/toolkit/site.sh" || exit 2
+JID=${PBS_JOBID%%.*}; LANES=${LANES:-16}; WALL=${WALL:-$WALLTIME}
+WALL_S=$(wall_seconds "$WALL"); DEADLINE_S=$((WALL_S - ${MARGIN_S:-600}))   # no new shots in the last 10 min
+echo "$(date -Is) job $PBS_JOBID host $(hostname) slice=$SLICE_FILE lanes=$LANES wall=$WALL env=$FDP_ENV_KIND site=$SITE"
+[ -f "$SLICE_FILE" ] || { echo "no slice file"; exit 2; }
+fdp_token_ok "$(echo "$WALL_S" | awk '{printf "%.2f", $1/3600 + 0.25}')" || { echo "token too short; stopping"; exit 3; }
+fdp_proxy; fdp_proxy_ok || { echo "proxy unreachable from $(hostname); stopping"; exit 5; }
+fdp_env
+export TMPDIR=/tmp/fdp_$JID; mkdir -p "$TMPDIR"
+LOG=${SLICE_FILE%.txt}_$JID.fetch.log; LOG=$(dirname "$(dirname "$LOG")")/logs/$(basename "$LOG")
+mkdir -p "$(dirname "$LOG")"
+# shellcheck disable=SC2086
+(cd "$TMPDIR" && fdp_launch "$TOOLKIT_DIR/fetch_signals.py" --signals "$SPEC" --shots "$SLICE_FILE" --out "$OUT" \
+   --lanes "$LANES" --deadline-s "$DEADLINE_S" ${EXTRA:-}) 2>&1 | grep -v "Warning\|warnings.warn" > "$LOG"
+echo "fetch rc=${PIPESTATUS[0]} $(grep SUMMARY "$LOG")"
+rm -rf "$TMPDIR"; echo "$(date -Is) end"

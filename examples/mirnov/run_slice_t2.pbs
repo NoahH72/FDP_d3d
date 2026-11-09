@@ -1,0 +1,44 @@
+#!/bin/bash
+#PBS -N mir_t2
+#PBS -A <YOUR_PROJECT>
+#PBS -q debug
+#PBS -l select=1:system=polaris
+#PBS -l walltime=01:00:00
+#PBS -l filesystems=home:eagle
+#PBS -j oe
+# Mirnov job 2 bulk: one slice work/slices/${CHUNK}_s${SLICE}.txt through code/mirnov_fetch_t2.py (old env). Submitted by chain_driver_t2.sh (CHAIN=0).
+# Env: CHUNK SLICE [CHAIN=1] [LANES=8] [RAW_EVERY=20] [Q=debug] [WALL=01:00:00]
+# Chain: CHAIN=1 queues the next slice at start with the same queue/walltime. Stops on: no next slice file,
+#        work/STOP_CHAIN, token too short (exit 3), proxy unreachable (exit 5).
+set -u
+H=/eagle/<YOUR_PROJECT>/<YOUR_USERNAME>; R=$H/mirnov_2026-10
+JID=${PBS_JOBID%%.*}
+SL=$(printf "%03d" $((10#$SLICE)))
+SLICE_FILE=$R/work/slices/${CHUNK}_s${SL}.txt
+LANES=${LANES:-8}; RAW_EVERY=${RAW_EVERY:-20}; Q=${Q:-debug}; WALL=${WALL:-01:00:00}
+WALL_S=$(echo $WALL | awk -F: '{print $1*3600+$2*60+$3}')
+# No new shots in the last 10 min of the job, 15 for L2 (shot >= 205534): its raw-check shots reach about 400 s at 8 lanes.
+DEADLINE_S=$((WALL_S - 600)); [ "$(head -1 "$SLICE_FILE" 2>/dev/null || echo 0)" -ge 205534 ] && DEADLINE_S=$((WALL_S - 900))
+unset BEARER_TOKEN
+echo "$(date -Is) job $PBS_JOBID host $(hostname) chunk=$CHUNK slice=$SL lanes=$LANES raw_every=$RAW_EVERY queue=$Q wall=$WALL"
+[ -f "$SLICE_FILE" ] || { echo "no slice file"; exit 2; }
+python3 $H/fdp-2026-10/token_status.py $(echo "$WALL_S" | awk '{printf "%.2f", $1/3600 + 0.25}') || { echo "token too short; stopping (no chain)"; exit 3; }
+export http_proxy=http://proxy.alcf.anl.gov:3128 https_proxy=http://proxy.alcf.anl.gov:3128
+export HTTP_PROXY=$http_proxy HTTPS_PROXY=$https_proxy ALL_PROXY=$https_proxy all_proxy=$https_proxy
+if ! curl -s --max-time 20 https://osg-htc.org -o /dev/null; then
+  sleep 60; curl -s --max-time 20 https://osg-htc.org -o /dev/null || { echo "proxy unreachable from $(hostname); stopping (no chain)"; exit 5; }
+fi
+NEXT=$((10#$SLICE + 1)); NS=$(printf "%03d" $NEXT); NEXT_FILE=$R/work/slices/${CHUNK}_s${NS}.txt
+if [ "${CHAIN:-0}" = "1" ] && [ -f "$NEXT_FILE" ] && [ ! -f $R/work/STOP_CHAIN ]; then
+  NJ=$(qsub -q $Q -l walltime=$WALL -o $R/work/logs/${CHUNK}_s${NS}.pbs.out -N ${CHUNK}s${NS} \
+       -v CHUNK=$CHUNK,SLICE=$NEXT,CHAIN=1,LANES=$LANES,RAW_EVERY=$RAW_EVERY,Q=$Q,WALL=$WALL $R/code/run_slice.pbs 2>&1) \
+       && echo "[chain] queued slice $NEXT: $NJ" || echo "[chain] qsub failed: $NJ"
+fi
+export OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 FDP_NO_AUTO_LOGIN=1 XRD_CURLDISABLEPREFETCH=1
+export FDP_INDEX_SNAPSHOT=json_indexes_2026-06-23_15:20:51
+F=$H/fdp/.pixi/envs/default; export CONDA_PREFIX=$F PREFIX=$F LD_LIBRARY_PATH=$F/lib:${LD_LIBRARY_PATH:-}
+export TMPDIR=/tmp/mir_$JID; mkdir -p $TMPDIR
+cd $TMPDIR && $F/bin/fdp run $F/bin/python $R/code/mirnov_fetch_t2.py --shots $SLICE_FILE --out $R/work/staging/T2 \
+  --lanes $LANES --raw-check $RAW_EVERY --deadline-s $DEADLINE_S 2>&1 | grep -v "Warning\|warnings.warn" > $R/work/logs/${CHUNK}_s${SL}_${JID}.fetch.log
+echo "fetch rc=${PIPESTATUS[0]} $(grep SUMMARY $R/work/logs/${CHUNK}_s${SL}_${JID}.fetch.log)"
+rm -rf $TMPDIR; echo "$(date -Is) end"

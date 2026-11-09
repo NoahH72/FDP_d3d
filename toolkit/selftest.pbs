@@ -1,0 +1,36 @@
+#!/bin/bash
+#PBS -N fdp_selftest
+#PBS -l select=1
+#PBS -l walltime=00:30:00
+#PBS -j oe
+# End-to-end check of this repo on a compute node. Run it first on any new site or after any env change:
+#   qsub -A <PROJECT> -q debug -l filesystems=home:eagle -l select=1:system=polaris -o selftest.out \
+#        -v REPO=$PWD toolkit/selftest.pbs
+# Steps: token, proxy, fdp_smoke.py (PTDATA + 2 MDS trees), PTDATA index read, fetch_signals.py on 3 shots with
+# toolkit/signals/core_basic.json (177267 has no data at all: expect state error with ip absent, EFIT01 TreeFOPENR,
+# Thomson TreeNODATA and a failing ip canary; 165920 and 185000 fetched), then the same
+# in the old env if FDP_OLD_ENV is set. Outputs in $WORK_ROOT/fdp_selftest/<jobid>/.
+set -u
+. "${REPO:?set REPO}/toolkit/site.sh" || exit 2
+JID=${PBS_JOBID%%.*}; O=$WORK_ROOT/fdp_selftest/$JID; mkdir -p "$O"
+echo "$(date -Is) host $(hostname) site=$SITE repo=$REPO"
+fdp_token_ok 1 || exit 3
+fdp_proxy; fdp_proxy_ok || { echo "proxy unreachable"; exit 5; }
+printf "165920\n185000\n177267\n" > "$O/shots.txt"
+for KIND in new old; do
+  [ $KIND = old ] && [ -z "${FDP_OLD_ENV:-}" ] && continue
+  FDP_ENV_KIND=$KIND; fdp_env; export TMPDIR=/tmp/fdp_st_$JID; mkdir -p "$TMPDIR"; cd "$TMPDIR" || exit 1
+  echo "=== $KIND env: fdp_smoke.py";  fdp_launch "$TOOLKIT_DIR/fdp_smoke.py" 165920 2>&1 | grep -v Warn
+  echo "=== $KIND env: PTDATA index";  fdp_launch "$TOOLKIT_DIR/ptdata_index.py" 185000 '^MPI66M' 2>&1 | grep -v Warn | cut -c1-300
+  echo "=== $KIND env: fetch_signals core_basic"
+  fdp_launch "$TOOLKIT_DIR/fetch_signals.py" --signals "$TOOLKIT_DIR/signals/core_basic.json" --shots "$O/shots.txt" \
+    --out "$O/store_$KIND" --lanes 3 2>&1 | grep -v Warn | cut -c1-400
+  python3 - "$O/store_$KIND" <<'PY'
+import json, glob, sys
+for p in sorted(glob.glob(sys.argv[1] + "/_status/*.json")):
+    s = json.load(open(p))
+    print(s["shot"], s["state"], {k: (v["status"], v.get("shape"), (v.get("exc") or v.get("absent_basis") or "")[:90]) for k, v in s["signals"].items()}, s.get("canary_ip", ""))
+PY
+  rm -rf "$TMPDIR"
+done
+echo "$(date -Is) selftest end (outputs in $O)"

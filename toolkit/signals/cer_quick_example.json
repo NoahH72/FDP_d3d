@@ -1,0 +1,10 @@
+{
+ "name": "cer_quick_example",
+ "note": "Verified 2026-11-08 on shots 165920 and 185000 (new env, toolkit/probe_mds.py): these IONS nodes return float32 data with times. CERFIT returned TreeNODATA on both shots. Channel counts and names vary by year; enumerate the channels you need with probe_mds.py on shots from each era before a bulk run.",
+ "signals": {
+  "cerquick_t01_temp": {"kind": "mds", "tree": "IONS", "node": "CER.CERQUICK.TANGENTIAL.CHANNEL01:TEMP", "dims": ["times"]},
+  "cerquick_t01_rotc": {"kind": "mds", "tree": "IONS", "node": "CER.CERQUICK.TANGENTIAL.CHANNEL01:ROTC", "dims": ["times"]},
+  "cerquick_v01_temp": {"kind": "mds", "tree": "IONS", "node": "CER.CERQUICK.VERTICAL.CHANNEL01:TEMP", "dims": ["times"]},
+  "cerauto_t01_temp":  {"kind": "mds", "tree": "IONS", "node": "CER.CERAUTO.TANGENTIAL.CHANNEL01:TEMP", "dims": ["times"]}
+ }
+}

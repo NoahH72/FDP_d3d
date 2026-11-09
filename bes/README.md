@@ -1,5 +1,7 @@
 # BES (Beam Emission Spectroscopy) — Standalone Fetch
 
+> **2026-10-13:** token and proxy setup changed (no `screen` proxy, no hand-copied token). See `/eagle/<YOUR_PROJECT>/<YOUR_USERNAME>/FDP_FETCH_GUIDE.md`. Pipeline commands below are unchanged.
+
 Self-contained 64-channel BES fetcher for DIII-D shots. Intended to run on a
 machine other than the GA saga cluster (e.g. ALCF Polaris) without depending
 on any of the saga `ECEI-Data` modules (`physics_config`, `physics_io`,

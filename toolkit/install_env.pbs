@@ -1,0 +1,20 @@
+#!/bin/bash
+#PBS -N fdp_install
+#PBS -l select=1
+#PBS -l walltime=00:45:00
+#PBS -j oe
+# Install an FDP environment from the pinned spec in env/<name>/ on a compute node (pixi fails on login nodes with
+# "failed to spawn thread ... Resource temporarily unavailable" because of the per-user thread limit).
+#   qsub -A <PROJECT> -q debug -l filesystems=home:eagle -l select=1:system=polaris -o install.out \
+#        -v REPO=$PWD,ENV_NAME=fdp-2026-11,PIXI=$HOME/.pixi/bin/pixi toolkit/install_env.pbs
+# Installs into $WORK_ROOT/<ENV_NAME>/.pixi/envs/default (the path sites/site.env expects).
+set -u
+. "${REPO:?set REPO}/toolkit/site.sh" || exit 2
+ENV_NAME=${ENV_NAME:-fdp-2026-11}; PIXI=${PIXI:-$(command -v pixi)}
+[ -x "$PIXI" ] || { echo "pixi not found: install it first (docs/01_SETUP.md) and pass PIXI=<path>"; exit 2; }
+fdp_proxy
+D=$WORK_ROOT/$ENV_NAME; mkdir -p "$D"
+cp -n "$REPO/env/$ENV_NAME/pixi.toml" "$REPO/env/$ENV_NAME/pixi.lock" "$D/"
+cmp -s "$REPO/env/$ENV_NAME/pixi.lock" "$D/pixi.lock" || { echo "$D/pixi.lock differs from the repo's; not overwriting"; exit 2; }
+cd "$D" && "$PIXI" install --locked; echo "pixi exit=$?"
+"$D/.pixi/envs/default/bin/python" -I -c "from importlib.metadata import version as v; print(' '.join(f'{p}={v(p)}' for p in ('fdp','toksearch','toksearch_d3d','ptdata')))"

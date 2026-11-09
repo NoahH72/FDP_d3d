@@ -77,6 +77,109 @@ NUM_PASSES = (ROWS + ROWS_PER_PASS - 1) // ROWS_PER_PASS  # ceil → 4
 # HDF5 chunk cache — sized for one pass worth of data
 HDF5_CHUNK_CACHE_NBYTES = int(2e9)
 
+# FDP rotates the json index snapshot every few days and deletes old ones, so
+# the value hardcoded in the fdp package (json_indexes_2026-01-13...) goes stale
+# and every fetch fails with "Cannot open file". We auto-discover the newest
+# snapshot from the origin at startup and repoint PTDATA_JSON_INDEX_DIR at it.
+_FDP_INDEX_BASE_URL = "pelican://osg-htc.org:443/fdp-d3d/archives/index/json"
+_FDP_INDEX_DIR = "/fdp-d3d/archives/index/json/"
+_FDP_INDEX_SNAPSHOT_CACHE = os.path.join(
+    os.path.expanduser("~"), ".fdp", "latest_index_snapshot"
+)
+_FDP_INDEX_CACHE_TTL_S = int(os.environ.get("FDP_INDEX_CACHE_TTL_S", str(24 * 3600)))
+
+
+def _discover_latest_index_snapshot():
+    """Return the newest json_indexes_* snapshot name on the FDP origin.
+
+    Snapshot names are timestamped (json_indexes_YYYY-MM-DD_HH:MM:SS) so a
+    lexical sort is chronological. Returns None if discovery fails.
+    """
+    try:
+        from toksearch_d3d.fdp.cli import FdpFileSystem, ORIGIN_SERVER
+        fs = FdpFileSystem(ORIGIN_SERVER)
+        entries = fs.ls(_FDP_INDEX_DIR)
+        snaps = sorted(
+            os.path.basename(str(p)) for p in entries
+            if os.path.basename(str(p)).startswith("json_indexes_")
+        )
+        return snaps[-1] if snaps else None
+    except Exception as e:
+        print(f"[fdp-index] snapshot discovery failed: {e}", flush=True)
+        return None
+
+
+def resolve_and_apply_latest_index_dir():
+    """Point PTDATA_JSON_INDEX_DIR at the newest json index snapshot.
+
+    Resolution order:
+      1. FDP_INDEX_SNAPSHOT env var (explicit pin, skips discovery)
+      2. fresh cache file (< FDP_INDEX_CACHE_TTL_S old) so only the first job
+         in a chain pays the ~1 min origin-listing cost
+      3. live discovery from the origin (result written back to cache)
+      4. whatever PTDATA_JSON_INDEX_DIR already holds (last-resort fallback)
+
+    Sets os.environ["PTDATA_JSON_INDEX_DIR"] (so Ray workers inherit it via
+    runtime_env) and updates the already-imported prestage._INDEX_BASE.
+    """
+    snapshot = os.environ.get("FDP_INDEX_SNAPSHOT")
+    source = "env FDP_INDEX_SNAPSHOT"
+
+    if not snapshot:
+        try:
+            if os.path.exists(_FDP_INDEX_SNAPSHOT_CACHE):
+                age = time.time() - os.path.getmtime(_FDP_INDEX_SNAPSHOT_CACHE)
+                if age < _FDP_INDEX_CACHE_TTL_S:
+                    with open(_FDP_INDEX_SNAPSHOT_CACHE) as f:
+                        cached = f.read().strip()
+                    if cached:
+                        snapshot = cached
+                        source = f"cache ({age / 3600:.1f}h old)"
+        except Exception:
+            pass
+
+    if not snapshot:
+        snapshot = _discover_latest_index_snapshot()
+        source = "origin discovery"
+        if snapshot:
+            try:
+                os.makedirs(os.path.dirname(_FDP_INDEX_SNAPSHOT_CACHE), exist_ok=True)
+                with open(_FDP_INDEX_SNAPSHOT_CACHE, "w") as f:
+                    f.write(snapshot)
+            except Exception:
+                pass
+
+    # Live discovery failed (transient origin/proxy hiccup). Rather than silently
+    # falling back to the stale hard-coded default index (which makes an entire
+    # batch fetch 0 valid shots), reuse the last cached snapshot regardless of age.
+    # A slightly-old but real snapshot is vastly safer than the dead default.
+    if not snapshot:
+        try:
+            if os.path.exists(_FDP_INDEX_SNAPSHOT_CACHE):
+                with open(_FDP_INDEX_SNAPSHOT_CACHE) as f:
+                    cached = f.read().strip()
+                if cached:
+                    snapshot = cached
+                    source = "stale cache (discovery failed)"
+        except Exception:
+            pass
+
+    if snapshot:
+        index_dir = f"{_FDP_INDEX_BASE_URL}/{snapshot}"
+        os.environ["PTDATA_JSON_INDEX_DIR"] = index_dir
+        try:
+            import prestage as _prestage
+            _prestage._INDEX_BASE = index_dir
+        except Exception:
+            pass
+        print(f"[fdp-index] using snapshot {snapshot}  (via {source})", flush=True)
+        return index_dir
+
+    fallback = os.environ.get("PTDATA_JSON_INDEX_DIR", "")
+    print(f"[fdp-index] WARNING: could not resolve a snapshot; "
+          f"falling back to existing PTDATA_JSON_INDEX_DIR={fallback}", flush=True)
+    return fallback
+
 
 def ray_init_kwargs_for_fdp():
     """Arguments for ray.init so workers inherit Pelican proxy + FDP env (Polaris compute nodes).
@@ -110,6 +213,15 @@ def ray_init_kwargs_for_fdp():
         "XRDCP_ALLOW_HTTP",
         "XRD_PELICANUSEAUTHHEADERS",
         "XRD_CURLDISABLEPREFETCH",
+        # XRootD read timeout/retry budget. Old/cold archives are slow to serve;
+        # under Ray parallelism a tight default budget makes their reads time out
+        # and the pass reports no_data even though the data exists (a serial probe
+        # with a 60s budget fetches them fine). Propagate so workers get it too.
+        "XRD_REQUESTTIMEOUT",
+        "XRD_TIMEOUTRESOLUTION",
+        "XRD_STREAMTIMEOUT",
+        "XRD_CONNECTIONWINDOW",
+        "XRD_CONNECTIONRETRY",
         "default_tree_path",
         "LD_LIBRARY_PATH",
         "SYS_D3",
@@ -941,6 +1053,8 @@ def run_fetch_raw_channelwise_job(
 
 
 def main():
+    resolve_and_apply_latest_index_dir()
+
     shots_all = paths_config.load_clean_shot_list(CLEAN_SHOTS_FILE)
     shots = shots_all[BATCH_START:BATCH_END]
     print(f"Shots: {len(shots)} (indices {BATCH_START}:{BATCH_END})")

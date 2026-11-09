@@ -1,0 +1,19 @@
+#!/bin/bash
+#PBS -N J2sCAP
+#PBS -A <YOUR_PROJECT>
+#PBS -q capacity
+#PBS -l select=4:system=polaris
+#PBS -l filesystems=home:eagle
+#PBS -j oe
+# Mirnov job 2 on the capacity queue: one code/cap_worker_t2.sh per node. Fetching stays in run_slice_t2.pbs / mirnov_fetch_t2.py.
+# Submit with -l walltime=HH:MM:SS -v CAP_WALL_S=<same in seconds>. Name starts J2s so the driver waits for it at the end.
+set -u
+R=/eagle/<YOUR_PROJECT>/<YOUR_USERNAME>/mirnov_2026-10; JB=${PBS_JOBID%%.*}; END=$(($(date +%s) + CAP_WALL_S))
+type mpiexec >/dev/null 2>&1 || module load cray-pals
+mapfile -t NODES < <(sort -u $PBS_NODEFILE)
+echo "$(date -Is) capacity job $PBS_JOBID nodes ${NODES[*]} wall ${CAP_WALL_S}s"
+for i in "${!NODES[@]}"; do
+  mpiexec -n 1 --ppn 1 --hosts ${NODES[$i]} bash $R/code/cap_worker_t2.sh $i $END $JB &
+done
+wait
+echo "$(date -Is) capacity job end"

@@ -1,81 +1,50 @@
 # Troubleshooting
 
-Quick reference for common issues. For detailed guides, see the [docs/](docs/) folder.
+Symptom, cause, fix. Details in [docs/](docs/).
 
-## Connection and Proxy Issues
+## Token and access
 
-| Symptom | Likely Cause | Fix |
-|---------|-------------|-----|
-| `WARNING: proxy not reachable` in PBS log | The `screen fdp_proxy` session died or login node rebooted | Restart proxy: `screen -dmS fdp_proxy python3 scripts/https_proxy.py --port 18443` |
-| `fdp run python -m ptdata.check` hangs >30s | `ALL_PROXY` not set, or proxy is down | Verify proxy is running (`screen -ls`); check env vars (`echo $ALL_PROXY`) |
-| `curl: connection refused` from compute node | Compute node has no direct internet | Set `ALL_PROXY` and `all_proxy` to point to the login node proxy |
-| Proxy starts but compute node can't reach it | Wrong login node hostname in proxy address | Check `cat /eagle/<YOUR_PROJECT>/<YOUR_USERNAME>/fdp/.proxy_addr`; restart proxy if on wrong node |
+| Symptom | Cause | Fix |
+|---|---|---|
+| `Error code 4000: acquired token not valid for /fdp-d3d` | token issued without `storage.read`: not in the DIII-D GitHub org, or a stale browser cookie | docs/02 "Gotchas": approve in a private window |
+| HTTP 401/403, or "not found" for paths that exist | expired or missing token | `python3 toolkit/token_status.py`; docs/02 |
+| `$BEARER_TOKEN is set but its token is expired` | stale exported variable | `unset BEARER_TOKEN`; never export it |
+| job log `token too short; stopping` (exit 3) | the job would outlive the token | owner refreshes (docs/02); restart the driver; reset `state/NEXT` to the first refused slice |
+| driver log `TOKEN SHORT` | as above, at submit time | as above |
+| pelican shows your password in plain text | its prompt echoes under fdp's wrapper | reset (docs/02) and `clear` the terminal |
 
-## Authentication Issues
+## Reads fail
 
-| Symptom | Likely Cause | Fix |
-|---------|-------------|-----|
-| `fetch ok: False` in ptdata.check | Bearer token expired | Renew token from Brian (GA-FDP); place at `~/.fdp/token` |
-| `~/.fdp/token` is empty or missing | Token never set up | See [Prerequisites](docs/01_PREREQUISITES.md) for token setup |
-| `WARNING: BEARER_TOKEN not found` | Token file missing or wrong path | Verify `cat ~/.fdp/token` shows a JWT string starting with `eyJ` |
+| Symptom | Cause | Fix |
+|---|---|---|
+| old env: **every** read `PtDataError 7: Invalid shot number`, controls too | ptdata is using the removed index `json_indexes_2026-01-13_12:22:11` | repoint `PTDATA_JSON_INDEX_DIR` to the pinned snapshot (`ptdata_index.pin_ptdata_env()`; the toolkit does it) |
+| `Cannot open file ... json_indexes_2026-01-13_12:22:11 ...` | same | same |
+| new env: `getservbyname failed for task 'PTSERVER'` | pointname absent, bogus, or shot has no PTDATA (ptdata fell back to GA's server) | classify from the index; if the name is listed, it is an error: check token and index |
+| one worker fails every shot (`Cannot open file: pelican://.../index/json/...`, about 3 s per shot) while others work | a bad worker process | nothing to fix in place; the shots are `error` and the retry pass fetches them |
+| all workers fail for 2-5 minutes, then recover | short FDP/Pelican outage | retry pass |
+| `list_pointnames()` fails (`Shot.extension not found`) | not supported over FDP | use `toolkit/ptdata_index.py` |
+| `times not strictly increasing` on every retry | archive defect | report; do not store that channel (docs/05) |
+| MDS `TreeNNF` / `TreeNODATA` | node path wrong, or no data for that shot | check the path with `probe_mds.py` on a shot that should have it |
+| TDI `DIM_OF()` fails | not supported over FDP | `MdsSignal(..., dims=("times",))` |
 
-## PBS / Job Issues
+## Jobs, queues, nodes
 
-| Symptom | Likely Cause | Fix |
-|---------|-------------|-----|
-| `Batch: BATCH_START=0 BATCH_END=10` (default values) | Forgot `-v BATCH_START=...,BATCH_END=...` | Resubmit with correct `-v` args |
-| `qsub: Job rejected: Unknown queue` | Wrong queue name | Use `debug` (short jobs) or `preemptable` (production) |
-| Job output appears in wrong directory | PBS log path issue | Create `~/pbs/` directory: `mkdir -p ~/pbs` |
-| Job fails immediately with exit code 1 | Proxy not reachable (pre-flight check fails) | Start the proxy before submitting |
+| Symptom | Cause | Fix |
+|---|---|---|
+| `would exceed queue ...'s per-user limit of jobs in 'Q' state` | per-user queue limit (Polaris debug: 1 running + 1 queued) | wait; the driver retries every 2 min |
+| proxy unreachable (exit 5) | proxy down or env vars missing | `fdp_proxy` sets `ALL_PROXY`/`all_proxy` too (XRootD ignores `https_proxy` alone); retry later |
+| `failed to spawn thread ... Resource temporarily unavailable` (pixi), or a probe hangs / segfaults on a login node | login-node per-user thread limit | install and fetch on compute nodes |
+| `AF_UNIX path too long` (Ray) | long TMPDIR | `export TMPDIR=/tmp/ray_${PBS_JOBID%%.*}` |
+| two drivers fighting, promote crashes | a second driver started from another login node | `state/driver.lock` prevents it; kill by exact PID on the owning node |
+| a driver dies when your session ends | started in the foreground | `setsid nohup ... & disown` (docs/05) |
+| slices finish far earlier than walltime | a bad worker burned through the slice quickly, or the slice is too small | check the per-shot states; resize slices if all good |
 
-## Environment Issues
-
-| Symptom | Likely Cause | Fix |
-|---------|-------------|-----|
-| `ModuleNotFoundError: No module named 'toksearch'` | Wrong Python binary or env not installed | Run `install_fdp_polaris.sh`; verify `$CONDA_PREFIX/bin/python -c "import toksearch"` |
-| `Segmentation fault` on login node | Login node PID limit (128) exceeded by XRootD threads | Use compute node instead; or reduce Cursor/VS Code processes |
-| `EAGAIN` or `Resource temporarily unavailable` during `pixi install` | Login node PID limit | Run `pixi install` on an interactive compute node |
-| `Permission denied` for SSH compute to login | `authorized_keys` missing or wrong permissions | Run: `cat ~/.ssh/id_ed25519.pub >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys` |
-
-## Ray Issues
-
-| Symptom | Likely Cause | Fix |
-|---------|-------------|-----|
-| `AF_UNIX path too long` or Ray startup fails | PBS temp directory path exceeds 107 byte limit | Set `TMPDIR=/tmp/ray_$PBS_JOBID` (already done in PBS scripts) |
-| Ray workers fail to fetch data | Proxy/token env vars not propagated to workers | Ensure `resource_utils.ray_init_kwargs_for_fdp()` is used (already wired in) |
-| `TypeError: compute_ray() got unexpected keyword argument 'num_cpus'` | Newer TokSearch API change | Remove `num_cpus` arg from `compute_ray()` call |
-
-## Data Issues
-
-| Symptom | Likely Cause | Fix |
-|---------|-------------|-----|
-| `all-zero channel_means rows 5-19` warning | Older shot with fewer ECEI channels | Inspect HDF5 manually; usually valid data |
-| Missing shots in output | Shot has no ECEI data on CDN, or job was preempted | Check CDN availability; resubmit (pipeline skips existing files) |
-| Output HDF5 file is 0 bytes or corrupt | Job was killed during write | Delete the file and resubmit; pipeline uses atomic `.tmp` + `os.replace` |
-
-## Quick Diagnostic Commands
+## Quick checks
 
 ```bash
-# Check proxy status
-screen -ls | grep fdp_proxy
-curl -s --max-time 5 --proxy "http://$(cat /eagle/<YOUR_PROJECT>/<YOUR_USERNAME>/fdp/.proxy_addr)" \
-  https://osg-htc.org -o /dev/null && echo "proxy OK" || echo "proxy DEAD"
-
-# Check token
-cat ~/.fdp/token | head -c 40
-
-# Check token expiry
-cat ~/.fdp/token | cut -d'.' -f2 | base64 -d 2>/dev/null | python3 -c \
-  "import sys,json,datetime; d=json.load(sys.stdin); \
-   print('exp:', datetime.datetime.fromtimestamp(d['exp']), '| now:', datetime.datetime.now())"
-
-# Check FDP environment
-ls /eagle/<YOUR_PROJECT>/<YOUR_USERNAME>/fdp/.pixi/envs/default/bin/python
-/eagle/<YOUR_PROJECT>/<YOUR_USERNAME>/fdp/.pixi/envs/default/bin/python -c "import toksearch; print('OK')"
-
-# Check all jobs
-qstat -u $USER
-
-# Check output count
-ls /eagle/<YOUR_PROJECT>/<YOUR_USERNAME>/signal_data/ECEI_Assembled/*.h5 2>/dev/null | wc -l
+python3 toolkit/token_status.py 2                              # token
+qstat -u $USER                                                 # jobs
+tail <campaign>/logs/driver_events.log                         # driver
+grep SUMMARY <campaign>/logs/<series>_s0*_*.fetch.log | tail   # per-slice results
+python3 toolkit/manifest.py <store>                            # counts per state, TB
 ```

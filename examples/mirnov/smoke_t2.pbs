@@ -1,0 +1,26 @@
+#!/bin/bash
+#PBS -N mir_smoke2
+#PBS -A <YOUR_PROJECT>
+#PBS -q debug
+#PBS -l select=1:system=polaris
+#PBS -l walltime=01:00:00
+#PBS -l filesystems=home:eagle
+#PBS -j oe
+#PBS -o /eagle/<YOUR_PROJECT>/<YOUR_USERNAME>/mirnov_2026-10/work/logs/smoke_t2.pbs.out
+# Mirnov job 2 smoke test (MPI*D minus MPI66M###D), old env (ptdata 1.4.6). Writes only under work/smoke/T2_*.
+set -u
+H=/eagle/<YOUR_PROJECT>/<YOUR_USERNAME>; R=$H/mirnov_2026-10; S=$R/work/smoke
+unset BEARER_TOKEN
+python3 $H/fdp-2026-10/token_status.py 2 || exit 3
+export http_proxy=http://proxy.alcf.anl.gov:3128 https_proxy=http://proxy.alcf.anl.gov:3128
+export HTTP_PROXY=$http_proxy HTTPS_PROXY=$https_proxy ALL_PROXY=$https_proxy all_proxy=$https_proxy
+curl -s --max-time 20 https://osg-htc.org -o /dev/null || { echo "proxy unreachable"; exit 5; }
+export OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 FDP_NO_AUTO_LOGIN=1 XRD_CURLDISABLEPREFETCH=1
+export FDP_INDEX_SNAPSHOT=json_indexes_2026-06-23_15:20:51
+F=$H/fdp/.pixi/envs/default; export CONDA_PREFIX=$F PREFIX=$F LD_LIBRARY_PATH=$F/lib:${LD_LIBRARY_PATH:-}
+export TMPDIR=/tmp/mir_${PBS_JOBID%%.*}; mkdir -p $TMPDIR
+run() { echo "== $1 $(date -Is)"; (cd $TMPDIR && $F/bin/fdp run $F/bin/python $R/code/mirnov_fetch_t2.py "${@:2}") 2>&1 | grep -v "Warning\|warnings.warn"; }
+run smoke14 --shots $S/smoke15.txt --out $S/T2_smoke --lanes 8 --raw-check 1 --deadline-s 1500
+run negatives --shots $S/neg.txt --out $S/T2_neg --lanes 2 --raw-check 1
+LEFT=$((3000 - SECONDS)); [ $LEFT -gt 300 ] && run sample32 --shots $S/t2_sample.txt --out $S/T2_sample --lanes 32 --raw-check 20 --deadline-s $LEFT
+du -sh $S/T2_*; rm -rf $TMPDIR; echo "end $(date -Is)"

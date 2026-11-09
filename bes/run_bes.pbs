@@ -107,6 +107,48 @@ echo "USE_FDP:       ${USE_FDP:-1}"
 echo "Start:         $(date)"
 echo "=========================================="
 
+# ── CHAIN MODE (debug self-chain; mirrors run_batch_channelwise.pbs) ─────────
+# When CHAIN_NEXT=1, queue the NEXT slice now. debug allows 1 running + 1 queued
+# per user, so the next job waits in Q until this one ends -> back-to-back runs
+# with no babysitter, no preemption. Stops when NEXT_START >= CHAIN_STOP_AT or
+# the stop flag exists.  Halt cleanly: touch ${HOME}/pbs/STOP_BES_CHAIN
+if [ "${CHAIN_NEXT:-0}" = "1" ]; then
+  CHAIN_BATCH_SIZE="${CHAIN_BATCH_SIZE:-300}"
+  CHAIN_STOP_FLAG="${CHAIN_STOP_FLAG:-${HOME}/pbs/STOP_BES_CHAIN}"
+  CHAIN_LOG_PREFIX="${CHAIN_LOG_PREFIX:-${HOME}/pbs/bes_chain}"
+  CHAIN_NAME_PREFIX="${CHAIN_NAME_PREFIX:-bes_c}"
+  CHAIN_QUEUE="${CHAIN_QUEUE:-debug}"
+  CHAIN_WALLTIME="${CHAIN_WALLTIME:-01:00:00}"
+  CHAIN_ACCOUNT="${CHAIN_ACCOUNT:-<YOUR_PROJECT>}"
+  CHAIN_STOP_AT="${CHAIN_STOP_AT:-9890}"
+
+  NEXT_START=${BATCH_END:-0}
+  NEXT_END=$((NEXT_START + CHAIN_BATCH_SIZE))
+  if [ "${NEXT_END}" -gt "${CHAIN_STOP_AT}" ]; then NEXT_END=${CHAIN_STOP_AT}; fi
+  STAMP=$(printf "%05d_%05d" "${NEXT_START}" "${NEXT_END}")
+  NEXT_NAME="${CHAIN_NAME_PREFIX}$((NEXT_START / CHAIN_BATCH_SIZE))"
+
+  if [ -f "${CHAIN_STOP_FLAG}" ]; then
+    echo "[CHAIN] STOP flag exists at ${CHAIN_STOP_FLAG} — NOT submitting next slice"
+  elif [ "${NEXT_START}" -ge "${CHAIN_STOP_AT}" ]; then
+    echo "[CHAIN] reached stop point ${CHAIN_STOP_AT} (next start=${NEXT_START}) — chain complete"
+  else
+    echo "[CHAIN] queueing next slice: ${NEXT_NAME} shots ${NEXT_START}..${NEXT_END} (stop_at=${CHAIN_STOP_AT})"
+    NEXT_JOB=$(qsub \
+      -A "${CHAIN_ACCOUNT}" -q "${CHAIN_QUEUE}" \
+      -l "select=1:ncpus=32:mem=200gb" \
+      -l "walltime=${CHAIN_WALLTIME}" \
+      -l "filesystems=home:eagle" \
+      -o "${CHAIN_LOG_PREFIX}_${STAMP}.out" -e "${CHAIN_LOG_PREFIX}_${STAMP}.err" \
+      -N "${NEXT_NAME}" \
+      -v "SHOT_LIST=${SHOT_LIST},BES_RAW_ROOT=${BES_RAW_ROOT},BATCH_START=${NEXT_START},BATCH_END=${NEXT_END},BES_WORKERS=${BES_WORKERS:-16},CHAIN_NEXT=1,CHAIN_BATCH_SIZE=${CHAIN_BATCH_SIZE},CHAIN_STOP_AT=${CHAIN_STOP_AT},CHAIN_STOP_FLAG=${CHAIN_STOP_FLAG},CHAIN_LOG_PREFIX=${CHAIN_LOG_PREFIX},CHAIN_NAME_PREFIX=${CHAIN_NAME_PREFIX},CHAIN_QUEUE=${CHAIN_QUEUE},CHAIN_WALLTIME=${CHAIN_WALLTIME},CHAIN_ACCOUNT=${CHAIN_ACCOUNT}" \
+      "${BES_DIR}/run_bes.pbs" 2>&1) \
+      && echo "[CHAIN] queued: ${NEXT_JOB}" \
+      || echo "[CHAIN] WARN: qsub failed (current job still runs): ${NEXT_JOB}"
+  fi
+fi
+# ─────────────────────────────────────────────────────────────────────────────
+
 export PYTHONUNBUFFERED=1
 export OPENBLAS_NUM_THREADS=1
 export OMP_NUM_THREADS=1
